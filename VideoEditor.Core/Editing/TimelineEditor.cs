@@ -381,6 +381,80 @@ public sealed class TimelineEditor(Project project)
         if (Project.Markers.RemoveAll(m => m.Id == id) == 0) throw new EditException($"Marcatore {id} non trovato.");
     }
 
+    // ---------- Sottotitoli ----------
+
+    /// <summary>Traccia dei sottotitoli (se esiste).</summary>
+    public Track? SubtitleTrack => Project.Tracks.FirstOrDefault(t => t.Subtitles && t.Kind == TrackKind.Text);
+
+    /// <summary>Stile predefinito dei sottotitoli, proporzionato all'altezza del progetto.</summary>
+    public TextStyle DefaultSubtitleStyle()
+    {
+        var h = Project.Settings.Height;
+        return new TextStyle
+        {
+            FontSize = Math.Round(h * 0.045),
+            Color = "#FFFFFF",
+            BoxColor = "#000000A0",
+            BoxPadding = Math.Round(h * 0.01),
+            BorderColor = null,
+            BorderWidth = 0,
+        };
+    }
+
+    /// <summary>
+    /// Crea (o ricrea) la traccia Sottotitoli con un testo per ogni sottotitolo. Se la traccia esiste già
+    /// il suo contenuto viene sostituito e, senza <paramref name="style"/>, si mantiene lo stile attuale.
+    /// </summary>
+    public Track SetSubtitles(IReadOnlyList<Transcription.SubtitleCue> cues, TextStyle? style = null, double y = 0.88)
+    {
+        var track = SubtitleTrack;
+        if (track is null)
+        {
+            track = AddTrack(TrackKind.Text, "Sottotitoli", 0);
+            track.Subtitles = true;
+        }
+        EnsureUnlocked(track);
+        var first = track.Clips.FirstOrDefault();
+        style ??= first?.Style is { } existing ? Json.Deserialize<TextStyle>(Json.Serialize(existing)) : DefaultSubtitleStyle();
+        var posY = first?.Y ?? y;
+        track.Clips.Clear();
+        foreach (var c in cues)
+        {
+            if (c.End - c.Start < MinDuration) continue;
+            track.Clips.Add(new Clip
+            {
+                Id = NextClipId(),
+                Text = c.Text,
+                Start = c.Start,
+                Duration = c.End - c.Start,
+                Y = posY,
+                Style = Json.Deserialize<TextStyle>(Json.Serialize(style)),
+            });
+        }
+        Sort(track);
+        return track;
+    }
+
+    /// <summary>Applica stile e posizione verticale di una clip a tutte le clip della sua traccia.</summary>
+    public int ApplyStyleToTrack(string clipId)
+    {
+        var (track, clip) = GetClip(clipId);
+        EnsureUnlocked(track);
+        if (!clip.IsText) throw new EditException("Solo per i testi.");
+        foreach (var c in track.Clips.Where(c => c.IsText && c != clip))
+        {
+            c.Style = clip.Style is null ? null : Json.Deserialize<TextStyle>(Json.Serialize(clip.Style));
+            c.X = clip.X;
+            c.Y = clip.Y;
+        }
+        return track.Clips.Count;
+    }
+
+    /// <summary>Sottotitoli attuali (dalla traccia Sottotitoli, con eventuali correzioni fatte a mano).</summary>
+    public List<Transcription.SubtitleCue> CurrentSubtitles() =>
+        (SubtitleTrack?.Clips ?? []).Where(c => c.IsText)
+            .Select(c => new Transcription.SubtitleCue(c.Start, c.End, c.Text!)).ToList();
+
     // ---------- Maschere di oscuramento ----------
 
     /// <summary>

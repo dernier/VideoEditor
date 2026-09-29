@@ -56,14 +56,51 @@ La CI su GitHub pubblica anche l'artefatto `video-editor-windows` pronto da scar
 3. **Timeline**: trascina le clip (anche tra tracce compatibili), rifila i bordi, aggancio a testina, clip e marcatori. Doppio clic su una traccia testi crea un testo.
 4. **Anteprima**: *Live* compone nel browser i proxy (immediata, approssimata); *⟳ Anteprima* renderizza con ffmpeg un'anteprima fedele (identica all'export) e passa in modalità *Render*; 📷 renderizza il fotogramma esatto sotto la testina.
 5. **Trascrizione** (🎙, Whisper locale, modello `large-v3-turbo` scaricato la prima volta): clic su una parola per saltarci, Maiusc+clic per selezionare un tratto e tagliarlo, pause (⏸) cliccabili, intercalari evidenziati, pulsanti *Pause* ed *Ehm* per tagliarli in blocco.
-6. **Oscurare** volti, nomi, email o targhe: **▦ Oscura** (o tasto B) crea una maschera alla testina sulla
-   traccia *Maschere*. A video fermo trascinala sul monitor e ridimensionala dagli angoli; nel pannello
+6. **Oscurare** volti, nomi, email o targhe: **◯ Oscura** (ellisse, tasto B) o **▭ Oscura** (rettangolo,
+   Maiusc+B), poi disegna la zona trascinando sul video: nasce una maschera di 3 s alla testina sulla
+   traccia *Maschere*. A video fermo la sposti sul monitor e la ridimensioni dagli angoli; nel pannello
    Proprietà scegli sfocatura, pixel o riquadro pieno ed ellisse/rettangolo. Se il soggetto si muove, vai in un
    altro istante e sposta la zona: si crea un keyframe e la maschera lo segue. La maschera oscura tutto ciò che
    sta sotto di lei (i testi sopra restano nitidi). Anche Claude può farlo: *«sfoca il volto della persona a destra»*.
-7. **Esporta**: MP4 con NVENC (H.264, HEVC o AV1 dalle impostazioni ⚙), audio AAC; musica con ducking automatico sotto il parlato.
+7. **Sottotitoli**: nella scheda *Trascrizione* **💬 Crea sottotitoli** genera la traccia *Sottotitoli*
+   (righe bilanciate, max 42 caratteri — modificabile —, intercalari esclusi). Correggi il testo nel pannello
+   Proprietà; cambia stile a uno e premi **Applica stile a tutta la traccia**; **Esporta SRT** per YouTube.
+   Sono testi veri: finiscono anche "impressi" nel video esportato (nascondi la traccia per non averli).
+8. **Esporta**: MP4 con NVENC (H.264, HEVC o AV1 dalle impostazioni ⚙), audio AAC; musica con ducking automatico sotto il parlato.
 
 Tutte le operazioni si annullano con Ctrl+Z, anche quelle fatte da Claude o da riga di comando.
+
+### Pulsanti
+
+| Dove | Pulsante | Cosa fa |
+|---|---|---|
+| Barra in alto | Nuovo / Apri / Importa | nuovo progetto in una cartella, apre un progetto, importa file (anche trascinandoli) |
+| | Live / Render | monitor in tempo reale (proxy, approssimato) o anteprima renderizzata (identica all'export) |
+| | ⟳ Anteprima | renderizza con ffmpeg l'anteprima fedele e passa in modalità Render |
+| | 📷 | fotogramma esatto alla testina, renderizzato da ffmpeg |
+| | Terminale | prompt nella cartella del progetto con `vedit` nel PATH (per `claude` interattivo) |
+| | Esporta | video finale MP4 (NVENC) |
+| | ⚙ | encoder, modello Whisper, percorso e modello di Claude, verifica di ffmpeg/Claude |
+| Barra della timeline | ↶ / ↷ | annulla / ripeti (anche le modifiche fatte da Claude) |
+| | ✂ Dividi | divide alla testina le clip selezionate, o tutte quelle sotto la testina |
+| | Elimina | toglie le clip selezionate lasciando il vuoto |
+| | Elimina e chiudi | toglie le clip selezionate e chiude il buco su tutte le tracce non bloccate |
+| | Taglia In/Out | taglia l'intervallo segnato con I e O e chiude il buco |
+| | T Testo | testo di 3 s alla testina |
+| | ◯ Oscura / ▭ Oscura | disegna sul video una maschera ellittica / rettangolare |
+| | ⚑ | marcatore alla testina (clic destro sul marcatore per toglierlo) |
+| | + Traccia… | nuova traccia video, audio, testi o maschere |
+| | aggancio, Zoom, ↔ | aggancio magnetico ai bordi; zoom della timeline; adatta alla finestra |
+| Intestazione traccia | 👁 M 🔒 D ▲ ✕ | nascondi, muto, blocca (esclusa dai tagli), ducking, sposta su, elimina traccia |
+| Pannello Media | + Importa, 🎙 Trascrivi | importa; trascrive con Whisper i video e gli audio del parlato |
+| | + Timeline, 🎙, ✕ (su ogni file) | accoda il file alla traccia, trascrive solo quel file, lo rimuove dal progetto |
+| Scheda Trascrizione | Pause, Ehm | trova pause lunghe / intercalari e li taglia tutti in blocco |
+| | 💬 Crea sottotitoli, Esporta SRT | traccia Sottotitoli dalla trascrizione; file .srt |
+| | Taglia, In/Out (su una selezione) | taglia le parole selezionate (Maiusc+clic) o le segna come In/Out |
+| Monitor / trasporto | ⏮ ◂ ▶ ▸ ⏭, muto | inizio, fotogramma indietro, play/pausa, fotogramma avanti, fine; silenzia l'anteprima |
+| Pannello Claude | chip, Invia, Interrompi, Nuova | richieste pronte, invia (Ctrl+Invio), ferma Claude, nuova conversazione |
+| Pannello Proprietà | campi della clip | tempi, testo e stile, posizione, scala, opacità, volume, dissolvenze; maschere: effetto, forma, keyframe |
+| | Applica stile a tutta la traccia | copia stile e posizione del testo selezionato su tutti i testi della traccia |
 
 ### Scorciatoie
 
@@ -73,7 +110,7 @@ Tutte le operazioni si annullano con Ctrl+Z, anche quelle fatte da Claude o da r
 | ← / → | fotogramma prec./succ. (Maiusc: 1 s) | Canc | elimina clip (Maiusc: elimina e ricompatta) |
 | I / O | segna In / Out | X | taglia l'intervallo In/Out |
 | T | testo alla testina | M | marcatore |
-| B | maschera di oscuramento alla testina | | |
+| B / Maiusc+B | disegna maschera ellittica / rettangolare | F12 | strumenti di sviluppo (diagnosi) |
 | Ctrl+Z / Ctrl+Y | annulla / ripeti | Ctrl+rotellina, + / − | zoom timeline |
 | Home / Fine | inizio / fine | Esc | deseleziona |
 
@@ -99,7 +136,8 @@ Esempi di richieste: *«pulisci il parlato: togli pause oltre 0,6 s, ehm e ripet
 vedit init | info | settings | validate | undo | redo | history
 vedit import <file...> [--add] | probe | proxy
 vedit add | text | move | trim | set | split | remove | cut | gap | track | marker
-vedit mask add --at T --dur D --rect x,y,w,h [--effect blur|pixelate|solid] | mask key <clip> <T> x,y,w,h
+vedit mask add --at T --dur D --rect x,y,w,h [--shape rect] [--effect blur|pixelate|solid] | mask key <clip> <T> x,y,w,h
+vedit subtitles create [--max-chars 42] | subtitles export file.srt | subtitles style <clip>
 vedit transcribe | transcript [--words|--srt|--json] | find "frase" | fillers | silences
 vedit render [--preview] [--encoder hevc_nvenc] | frame <T> [--grid]
 vedit app status | seek <T> | play | pause | select <clip> | reload | say "msg"

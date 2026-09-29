@@ -160,6 +160,14 @@ const commands = {
   addText: () => op({ op: 'addText', start: player.t, duration: 3, text: 'Testo' }),
   addMarker: () => op({ op: 'addMarker', time: player.t, label: '' }),
   addMask: () => op({ op: 'addMask', start: player.t, duration: 3 }),
+  drawMaskEllipse: () => startMaskDraw('ellipse'),
+  drawMaskRect: () => startMaskDraw('rect'),
+  createSubtitles: () => {
+    const hasSubs = S.project?.tracks.some(t => t.subtitles && t.clips.length);
+    if (hasSubs && !confirm('Ricreare i sottotitoli? Le correzioni fatte a mano sulla traccia Sottotitoli andranno perse (lo stile resta).')) return;
+    op({ op: 'createSubtitles', maxChars: +$('#subChars').value || 42, lines: 2 });
+  },
+  exportSrt: () => send('exportSrt'),
   addTrackMask: () => op({ op: 'addTrack', kind: 'mask' }),
   renderPreview: () => send('render', { preview: true }),
   frame: () => { player.pause(); send('frame', { time: player.t }); },
@@ -212,6 +220,11 @@ document.addEventListener('click', e => {
 });
 
 $('#chkMute').addEventListener('change', e => { player.muted = e.target.checked; });
+$('#addTrackSel').addEventListener('change', e => {
+  if (e.target.value) op({ op: 'addTrack', kind: e.target.value });
+  e.target.value = '';
+  e.target.blur();
+});
 
 // ================= Scorciatoie =================
 
@@ -238,10 +251,10 @@ document.addEventListener('keydown', e => {
     'x': () => commands.cutInOut(),
     'm': () => commands.addMarker(),
     't': () => commands.addText(),
-    'b': () => commands.addMask(),
+    'b': () => startMaskDraw(e.shiftKey ? 'rect' : 'ellipse'),
     '+': () => timeline.setZoom(timeline.zoom * 1.3, true),
     '-': () => timeline.setZoom(timeline.zoom / 1.3, true),
-    'Escape': () => { S.selection.clear(); timeline.updateSelection(); renderInspector(); setInOut(null, null); },
+    'Escape': () => { if (drawShape) { endMaskDraw(); return; } S.selection.clear(); timeline.updateSelection(); renderInspector(); setInOut(null, null); },
   };
   if (ctrl && k.toLowerCase() === 'z') { e.preventDefault(); send(e.shiftKey ? 'redo' : 'undo'); return; }
   if (ctrl && k.toLowerCase() === 'y') { e.preventDefault(); send('redo'); return; }
@@ -513,7 +526,8 @@ function renderInspector() {
     ${field('Dissolvenza in', num('fadeIn', c.fadeIn))}
     ${field('Dissolvenza out', num('fadeOut', c.fadeOut))}
     ${field('Nota', `<input data-k="note" value="${esc(c.note || '')}">`)}
-    <div class="row"><button data-x="seek">Vai all'inizio</button><button data-x="inout">Segna In/Out</button></div>`;
+    <div class="row"><button data-x="seek">Vai all'inizio</button><button data-x="inout">Segna In/Out</button></div>
+    ${isText ? `<div class="row"><button data-x="styleAll" title="Copia stile e posizione di questo testo su tutti i testi della traccia">Applica stile a tutta la traccia${f.track.subtitles ? ' (sottotitoli)' : ''}</button></div>` : ''}`;
   box.querySelectorAll('[data-k]').forEach(inp => inp.addEventListener('change', () => {
     let v = inp.value;
     if (inp.type === 'number' || inp.type === 'range') v = +v;
@@ -533,6 +547,8 @@ function renderInspector() {
     inp.previousElementSibling.dispatchEvent(new Event('change'));
   }));
   box.querySelector('[data-x="seek"]').onclick = () => seek(c.start);
+  const styleAll = box.querySelector('[data-x="styleAll"]');
+  if (styleAll) styleAll.onclick = () => op({ op: 'applyStyleToTrack', clipId: c.id });
   box.querySelector('[data-x="inout"]').onclick = () => setInOut(c.start, clipEnd(c));
 }
 
@@ -646,6 +662,69 @@ maskEdit.addEventListener('pointerup', () => {
   const q = v => Math.round(v * 10000) / 10000;
   op({ op: 'maskRect', clipId: d.id, time: d.time, x: q(r.x), y: q(r.y), w: q(r.w), h: q(r.h) });
 });
+
+// ================= Disegno di una nuova maschera sul monitor =================
+
+const stage = $('#stage');
+const maskDraw = $('#maskDraw');
+let drawShape = null;
+let drawStart = null;
+
+function startMaskDraw(shape) {
+  if (!S.project) return;
+  player.pause();
+  setMode('live');
+  drawShape = shape;
+  stage.classList.add('drawing');
+  const b = $('#stageBadge');
+  b.textContent = `Trascina sul video la zona da oscurare (${shape === 'rect' ? 'rettangolo' : 'ellisse'}) · Esc per annullare`;
+  b.classList.remove('hidden');
+}
+
+function endMaskDraw() {
+  drawShape = null;
+  drawStart = null;
+  stage.classList.remove('drawing');
+  maskDraw.classList.add('hidden');
+  $('#stageBadge').classList.add('hidden');
+}
+
+function stagePoint(e) {
+  const r = stage.getBoundingClientRect();
+  return { x: Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)), y: Math.min(1, Math.max(0, (e.clientY - r.top) / r.height)) };
+}
+
+stage.addEventListener('pointerdown', e => {
+  if (!drawShape || e.button !== 0) return;
+  e.preventDefault();
+  e.stopPropagation();
+  stage.setPointerCapture(e.pointerId);
+  drawStart = stagePoint(e);
+  maskDraw.classList.toggle('ellipse', drawShape === 'ellipse');
+  maskDraw.classList.remove('hidden');
+  updateDraw(drawStart);
+}, true);
+
+stage.addEventListener('pointermove', e => { if (drawShape && drawStart) updateDraw(stagePoint(e)); });
+
+stage.addEventListener('pointerup', e => {
+  if (!drawShape || !drawStart) return;
+  const p = stagePoint(e);
+  let x = (drawStart.x + p.x) / 2, y = (drawStart.y + p.y) / 2;
+  let w = Math.abs(p.x - drawStart.x), h = Math.abs(p.y - drawStart.y);
+  if (w < 0.01 && h < 0.01) { w = 0.2; h = 0.25; } // semplice clic: zona predefinita centrata lì
+  const q = v => Math.round(v * 10000) / 10000;
+  op({ op: 'addMask', start: player.t, duration: 3, mask: { shape: drawShape, effect: 'blur', x: q(x), y: q(y), w: q(Math.max(w, 0.01)), h: q(Math.max(h, 0.01)) } });
+  endMaskDraw();
+});
+
+function updateDraw(p) {
+  const l = Math.min(drawStart.x, p.x), t = Math.min(drawStart.y, p.y);
+  maskDraw.style.left = l * 100 + '%';
+  maskDraw.style.top = t * 100 + '%';
+  maskDraw.style.width = Math.abs(p.x - drawStart.x) * 100 + '%';
+  maskDraw.style.height = Math.abs(p.y - drawStart.y) * 100 + '%';
+}
 
 const field = (label, input) => `<div class="field"><label>${label}</label>${input}</div>`;
 const num = (k, v) => `<input type="number" data-k="${k}" value="${+(+v).toFixed(3)}" step="0.01" min="0">`;

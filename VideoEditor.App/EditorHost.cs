@@ -101,6 +101,7 @@ public sealed class EditorHost : IDisposable
                         Process.Start(new ProcessStartInfo("explorer.exe", Str(msg, "sub") is { } sub ? Path.Combine(_store.Directory, sub) : _store.Directory) { UseShellExecute = true });
                     break;
                 case "openTerminal": OpenTerminal(); break;
+                case "exportSrt": ExportSrt(); break;
                 case "devtools": _win.OpenDevTools(); break;
             }
         }
@@ -331,6 +332,27 @@ public sealed class EditorHost : IDisposable
                 ed.RemoveMaskKey(Str(op, "clipId")!, Num(op, "time") ?? _time);
                 label = "Rimosso keyframe";
                 break;
+            case "createSubtitles":
+            {
+                var words = TranscriptTools.ToWords(TranscriptTools.ToTimeline(_project, _store!.LoadTranscript));
+                if (words.Count == 0) throw new EditException("Nessuna trascrizione sulla timeline: premi prima «Trascrivi».");
+                var options = new SubtitleOptions
+                {
+                    MaxChars = (int)(Num(op, "maxChars") ?? 42),
+                    MaxLines = (int)(Num(op, "lines") ?? 2),
+                    SkipFillers = op["skipFillers"]?.GetValue<bool>() ?? true,
+                };
+                var track = ed.SetSubtitles(SubtitleBuilder.Build(words, options));
+                label = $"Creati {track.Clips.Count} sottotitoli";
+                Toast($"{track.Clips.Count} sottotitoli sulla traccia «{track.Name}». Selezionane uno per cambiare stile e usa «Applica a tutti».", "ok");
+                break;
+            }
+            case "applyStyleToTrack":
+            {
+                var n = ed.ApplyStyleToTrack(Str(op, "clipId")!);
+                label = $"Stile applicato a {n} testi";
+                break;
+            }
             case "addTrack":
                 ed.AddTrack(Enum.Parse<TrackKind>(Str(op, "kind")!, true), Str(op, "name"));
                 label = "Aggiunta traccia";
@@ -652,6 +674,24 @@ public sealed class EditorHost : IDisposable
         sb.AppendLine();
         sb.AppendLine("Richiesta dell'utente:");
         return sb.ToString();
+    }
+
+    private void ExportSrt()
+    {
+        if (_store is null || _project is null) return;
+        var cues = new TimelineEditor(_project).CurrentSubtitles();
+        if (cues.Count == 0) throw new InvalidOperationException("Nessun sottotitolo: crea prima i sottotitoli dalla trascrizione.");
+        Directory.CreateDirectory(_store.OutputDir);
+        var dlg = new SaveFileDialog
+        {
+            Title = "Esporta sottotitoli",
+            Filter = "Sottotitoli SRT|*.srt",
+            InitialDirectory = _store.OutputDir,
+            FileName = _project.Name + ".srt",
+        };
+        if (dlg.ShowDialog(_win) != true) return;
+        File.WriteAllText(dlg.FileName, SubtitleBuilder.ToSrt(cues), new UTF8Encoding(false));
+        Toast($"Esportati {cues.Count} sottotitoli in {Path.GetFileName(dlg.FileName)}", "ok");
     }
 
     private void OpenTerminal()

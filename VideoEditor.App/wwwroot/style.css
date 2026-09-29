@@ -212,6 +212,11 @@ textarea { user-select: text; resize: vertical; }
 #timeline { min-width: 0; display: flex; flex-direction: column; min-height: 0; background: var(--panel); }
 #tlBar { display: flex; gap: 6px; align-items: center; padding: 4px 8px; border-bottom: 1px solid var(--line); }
 #tlBar button { padding: 2px 8px; font-size: 12px; }
+#tlBar .group { display: flex; gap: 4px; align-items: center; padding-right: 8px; border-right: 1px solid var(--line); }
+#tlBar select { padding: 1px 4px; font-size: 12px; }
+#stage.drawing { cursor: crosshair; }
+#maskDraw { position: absolute; z-index: 51; border: 2px solid #ffd166; background: #ffd16622; pointer-events: none; }
+#maskDraw.ellipse { border-radius: 50%; }
 #zoom { width: 160px; }
 #tlScroll { flex: 1; overflow: auto; position: relative; }
 #tlInner { position: relative; min-height: 100%; }

@@ -112,6 +112,9 @@ public sealed class Track
     /// <summary>Abbassa automaticamente il volume quando c'è parlato sulle altre tracce (ducking).</summary>
     public bool Duck { get; set; }
 
+    /// <summary>Traccia di testi generata come sottotitoli dalla trascrizione (si rigenera ed esporta in SRT).</summary>
+    public bool Subtitles { get; set; }
+
     public List<Clip> Clips { get; set; } = [];
 
     [JsonIgnore] public bool IsVisual => Kind is TrackKind.Video or TrackKind.Text or TrackKind.Mask;

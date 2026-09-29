@@ -53,7 +53,8 @@ Le maschere sulla traccia `M1` sfocano (`blur`), pixelano (`pixelate`) o coprono
 - Per trovare le coordinate guarda il fotogramma: `vedit frame <T> --grid --out f.png` e leggi il PNG;
   la griglia ha linee ogni 0.1. Abbonda un po' con la zona (meglio coprire di più che lasciare scoperto).
 - Zona fissa: `vedit mask add --at 12 --dur 4 --rect 0.62,0.30,0.18,0.28` (di default ellisse sfocata;
-  `--shape rect`, `--effect pixelate|solid`, `--strength 40` per sfocare di più).
+  `--shape rect` per un rettangolo — adatto a testi, email, targhe —, `--effect pixelate|solid`,
+  `--strength 40` per sfocare di più).
 - Zona che si muove (volto che cammina): aggiungi keyframe negli istanti chiave, la zona si sposta in linea
   retta tra uno e l'altro: `vedit mask key c15 12.0 0.62,0.30,0.18,0.28`, `vedit mask key c15 14.5 0.40,0.32,0.18,0.28`.
   Controlla i fotogrammi intermedi con `vedit frame` e aggiungi keyframe dove la zona "scappa".
@@ -63,8 +64,12 @@ Le maschere sulla traccia `M1` sfocano (`blur`), pixelano (`pixelate`) o coprono
 
 ## Altre operazioni
 
-- Titoli e sottotitoli: `vedit text "Titolo" --at 0 --dur 3 --y 0.5 --size 96 --fade 0.3`.
-  Sottotitoli dalla trascrizione: crea un testo per frase (`vedit transcript --json` dà le parole).
+- Titoli: `vedit text "Titolo" --at 0 --dur 3 --y 0.5 --size 96 --fade 0.3`.
+- Sottotitoli dalla trascrizione: `vedit subtitles create` (traccia "Sottotitoli", righe da max 42
+  caratteri, intercalari esclusi; `--max-chars`, `--size`, `--y`). Falli **dopo** i tagli (se tagli dopo,
+  i sottotitoli si spostano insieme al video). Correggi errori di trascrizione con
+  `vedit set <clipId> text="..."`; stile uguale per tutti: `vedit subtitles style <clipId>`;
+  file per YouTube: `vedit subtitles export output/sottotitoli.srt`.
 - Picture in picture: clip su V2 con `vedit set c12 scale=0.3 x=0.82 y=0.2`.
 - Musica: `vedit import musica.mp3 --add --track A1 --at 0`, poi `vedit set c20 volume=0.4 fadeOut=2`
   e taglia la parte in eccesso con `vedit trim c20 --end <fine del video>`.

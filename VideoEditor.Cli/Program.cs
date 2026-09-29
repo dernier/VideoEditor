@@ -86,6 +86,12 @@ namespace VideoEditor.Cli
               fillers                                      intercalari (ehm, uhm...) con gli intervalli da tagliare
               silences [--track V1] [--db -35] [--min 0.6] [--pad 0.15]   pause sulla timeline
 
+            SOTTOTITOLI
+              subtitles create [--max-chars 42] [--lines 2] [--max-dur 6] [--size N] [--y 0.88] [--keep-fillers]
+                                           traccia "Sottotitoli" dalla trascrizione (la ricrea se esiste già)
+              subtitles export <file.srt>  esporta in SRT i sottotitoli della traccia (con le correzioni fatte a mano)
+              subtitles style <clipId>     applica stile e posizione di quel sottotitolo a tutti gli altri
+
             RENDERING (ffmpeg, NVENC se disponibile)
               render [--preview] [--out file.mp4] [--encoder auto|h264_nvenc|hevc_nvenc|av1_nvenc|libx264|libx265]
                      [--quality CQ] [--from T] [--to T] [--height H]
@@ -212,6 +218,17 @@ namespace VideoEditor.Cli
                     }, editor);
                 case "track": return Save(store, project, label, () => Track(editor, a), editor);
                 case "mask": return Save(store, project, label, () => Mask(editor, a), editor);
+                case "subtitles" or "subs" or "sottotitoli":
+                    if (a.Positional.FirstOrDefault() == "export")
+                    {
+                        var cues = editor.CurrentSubtitles();
+                        if (cues.Count == 0) throw new CliException("Nessun sottotitolo: usa prima 'vedit subtitles create'.");
+                        var file = Path.GetFullPath(a.Pos(1, "file.srt"));
+                        File.WriteAllText(file, SubtitleBuilder.ToSrt(cues), new UTF8Encoding(false));
+                        Console.WriteLine($"OK: {cues.Count} sottotitoli in {file}");
+                        return 0;
+                    }
+                    return Save(store, project, label, () => Subtitles(store, project, editor, a), editor);
                 case "marker":
                     return Save(store, project, label, () =>
                     {
@@ -482,6 +499,34 @@ namespace VideoEditor.Cli
                 }
                 default:
                     throw new CliException("Uso: mask add|key|unkey|clear ...");
+            }
+        }
+
+        private static string Subtitles(ProjectStore store, Project project, TimelineEditor editor, Args a)
+        {
+            switch (a.Positional.FirstOrDefault() ?? "create")
+            {
+                case "create":
+                {
+                    var options = new SubtitleOptions();
+                    if (a.Int("max-chars") is int mc) options.MaxChars = mc;
+                    if (a.Int("lines") is int lines) options.MaxLines = lines;
+                    if (a.Num("max-dur") is double md) options.MaxDuration = md;
+                    if (a.Flag("keep-fillers")) options.SkipFillers = false;
+                    var cues = SubtitleBuilder.Build(TimelineWords(store, project), options);
+                    TextStyle? style = null;
+                    if (a.Num("size") is double size) { style = editor.DefaultSubtitleStyle(); style.FontSize = size; }
+                    var track = editor.SetSubtitles(cues, style, a.Num("y") ?? 0.88);
+                    if (a.Num("y") is double y) foreach (var c in track.Clips) c.Y = y;
+                    return $"{track.Clips.Count} sottotitoli sulla traccia {track.Id}";
+                }
+                case "style":
+                {
+                    var n = editor.ApplyStyleToTrack(a.Pos(1, "clipId"));
+                    return $"stile applicato a {n} sottotitoli";
+                }
+                default:
+                    throw new CliException("Uso: subtitles create|export|style ...");
             }
         }
 

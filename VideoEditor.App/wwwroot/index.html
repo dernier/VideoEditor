@@ -14,19 +14,6 @@
       <button data-cmd="import" title="Importa file (o trascinali nella finestra)">Importa</button>
     </div>
     <div class="group">
-      <button data-cmd="undo" id="btnUndo" title="Annulla (Ctrl+Z)">↶</button>
-      <button data-cmd="redo" id="btnRedo" title="Ripeti (Ctrl+Y)">↷</button>
-    </div>
-    <div class="group">
-      <button data-cmd="split" title="Dividi alla testina (S)">✂ Dividi</button>
-      <button data-cmd="delete" title="Elimina (Canc)">Elimina</button>
-      <button data-cmd="rippleDelete" title="Elimina e ricompatta (Maiusc+Canc)">Elimina e chiudi</button>
-      <button data-cmd="cutInOut" title="Taglia l'intervallo In/Out (X)">Taglia In/Out</button>
-      <button data-cmd="addText" title="Testo alla testina (T)">T Testo</button>
-      <button data-cmd="addMask" title="Oscura una zona (volti, nomi, email…) alla testina (B)">▦ Oscura</button>
-      <button data-cmd="addMarker" title="Marcatore (M)">⚑</button>
-    </div>
-    <div class="group">
       <span class="seg" id="modeSwitch">
         <button data-mode="live" class="on" title="Anteprima in tempo reale (approssimata)">Live</button>
         <button data-mode="render" title="Anteprima renderizzata con ffmpeg (fedele)">Render</button>
@@ -61,6 +48,11 @@
           <button data-cmd="silences" title="Trova le pause lunghe">Pause</button>
           <button data-cmd="fillers" title="Seleziona gli intercalari (ehm, uhm…)">Ehm</button>
         </div>
+        <div class="tr-actions">
+          <button data-cmd="createSubtitles" title="Crea la traccia Sottotitoli dalla trascrizione (la ricrea se esiste)">💬 Crea sottotitoli</button>
+          <button data-cmd="exportSrt" title="Esporta i sottotitoli in un file .srt">Esporta SRT</button>
+          <label class="small" title="Caratteri massimi per riga"><input id="subChars" type="number" value="42" min="16" max="80" style="width:52px"> car.</label>
+        </div>
         <div id="trSelection" class="hidden">
           <span id="trSelInfo"></span>
           <button data-cmd="trCut">Taglia</button>
@@ -79,6 +71,7 @@
           <video id="previewVideo" class="hidden" preload="auto"></video>
           <img id="frameImg" class="hidden" alt="">
           <div id="stageBadge" class="hidden"></div>
+          <div id="maskDraw" class="hidden"></div>
           <div id="maskEdit" class="hidden"><div class="tip"></div><div class="h nw"></div><div class="h ne"></div><div class="h sw"></div><div class="h se"></div></div>
         </div>
       </div>
@@ -130,11 +123,32 @@
 
   <section id="timeline">
     <div id="tlBar">
-      <button data-cmd="addTrackVideo" title="Nuova traccia video">+ Video</button>
-      <button data-cmd="addTrackAudio" title="Nuova traccia audio">+ Audio</button>
-      <button data-cmd="addTrackText" title="Nuova traccia testi">+ Testo</button>
-      <button data-cmd="addTrackMask" title="Nuova traccia maschere">+ Maschere</button>
-      <label class="small"><input type="checkbox" id="chkSnap" checked> aggancio</label>
+      <div class="group">
+        <button data-cmd="undo" id="btnUndo" title="Annulla (Ctrl+Z)">↶</button>
+        <button data-cmd="redo" id="btnRedo" title="Ripeti (Ctrl+Y)">↷</button>
+      </div>
+      <div class="group">
+        <button data-cmd="split" title="Dividi alla testina le clip selezionate, o tutte quelle sotto la testina (S)">✂ Dividi</button>
+        <button data-cmd="delete" title="Elimina le clip selezionate lasciando lo spazio vuoto (Canc)">Elimina</button>
+        <button data-cmd="rippleDelete" title="Elimina le clip selezionate e chiude il buco su tutte le tracce (Maiusc+Canc)">Elimina e chiudi</button>
+        <button data-cmd="cutInOut" title="Taglia l'intervallo tra In (I) e Out (O) e chiude il buco (X)">Taglia In/Out</button>
+      </div>
+      <div class="group">
+        <button data-cmd="addText" title="Testo di 3 s alla testina (T)">T Testo</button>
+        <button data-cmd="drawMaskEllipse" title="Oscura con un'ellisse: disegnala sul video (B)">◯ Oscura</button>
+        <button data-cmd="drawMaskRect" title="Oscura con un rettangolo: disegnalo sul video (Maiusc+B)">▭ Oscura</button>
+        <button data-cmd="addMarker" title="Marcatore alla testina (M)">⚑</button>
+      </div>
+      <div class="group">
+        <select id="addTrackSel" title="Aggiungi una traccia">
+          <option value="">+ Traccia…</option>
+          <option value="video">Video</option>
+          <option value="audio">Audio</option>
+          <option value="text">Testi</option>
+          <option value="mask">Maschere</option>
+        </select>
+        <label class="small"><input type="checkbox" id="chkSnap" checked> aggancio</label>
+      </div>
       <div class="spacer"></div>
       <span class="muted small">Zoom</span>
       <input id="zoom" type="range" min="0" max="100" value="45">
