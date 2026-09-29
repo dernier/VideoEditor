@@ -1,0 +1,12 @@
+<Window x:Class="VideoEditor.App.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
+        Title="Video Editor" Width="1600" Height="950" MinWidth="1000" MinHeight="650"
+        WindowStartupLocation="CenterScreen" Background="#16181d">
+    <Grid>
+        <wv2:WebView2 x:Name="Web" DefaultBackgroundColor="#16181d" />
+        <TextBlock x:Name="Loading" Text="Avvio dell'editor..." Foreground="#8b93a1" FontSize="16"
+                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+    </Grid>
+</Window>

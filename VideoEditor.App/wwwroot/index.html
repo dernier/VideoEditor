@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Video Editor</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header id="toolbar">
+    <div class="group">
+      <button data-cmd="newProject" title="Nuovo progetto">Nuovo</button>
+      <button data-cmd="openProject" title="Apri progetto">Apri</button>
+      <button data-cmd="import" title="Importa file (o trascinali nella finestra)">Importa</button>
+    </div>
+    <div class="group">
+      <button data-cmd="undo" id="btnUndo" title="Annulla (Ctrl+Z)">↶</button>
+      <button data-cmd="redo" id="btnRedo" title="Ripeti (Ctrl+Y)">↷</button>
+    </div>
+    <div class="group">
+      <button data-cmd="split" title="Dividi alla testina (S)">✂ Dividi</button>
+      <button data-cmd="delete" title="Elimina (Canc)">Elimina</button>
+      <button data-cmd="rippleDelete" title="Elimina e ricompatta (Maiusc+Canc)">Elimina e chiudi</button>
+      <button data-cmd="cutInOut" title="Taglia l'intervallo In/Out (X)">Taglia In/Out</button>
+      <button data-cmd="addText" title="Testo alla testina (T)">T Testo</button>
+      <button data-cmd="addMarker" title="Marcatore (M)">⚑</button>
+    </div>
+    <div class="group">
+      <span class="seg" id="modeSwitch">
+        <button data-mode="live" class="on" title="Anteprima in tempo reale (approssimata)">Live</button>
+        <button data-mode="render" title="Anteprima renderizzata con ffmpeg (fedele)">Render</button>
+      </span>
+      <button data-cmd="renderPreview" title="Renderizza l'anteprima fedele (veloce con NVENC)">⟳ Anteprima</button>
+      <button data-cmd="frame" title="Fotogramma esatto renderizzato da ffmpeg">📷</button>
+    </div>
+    <div class="spacer"></div>
+    <div class="group">
+      <button data-cmd="openTerminal" title="Terminale nella cartella del progetto (per 'claude' interattivo)">Terminale</button>
+      <button data-cmd="export" class="primary" title="Esporta il video finale">Esporta</button>
+      <button data-cmd="settings" title="Impostazioni">⚙</button>
+    </div>
+  </header>
+
+  <main id="main">
+    <section id="left" class="panel">
+      <nav class="tabs">
+        <button data-tab="media" class="on">Media</button>
+        <button data-tab="transcript">Trascrizione</button>
+      </nav>
+      <div class="tab-body" data-tab-body="media">
+        <div class="bin-actions">
+          <button data-cmd="import">+ Importa</button>
+          <button data-cmd="transcribeAll" title="Trascrivi con Whisper (locale)">🎙 Trascrivi</button>
+        </div>
+        <div id="bin"></div>
+      </div>
+      <div class="tab-body hidden" data-tab-body="transcript">
+        <div class="tr-actions">
+          <input id="trSearch" type="search" placeholder="Cerca nella trascrizione…">
+          <button data-cmd="silences" title="Trova le pause lunghe">Pause</button>
+          <button data-cmd="fillers" title="Seleziona gli intercalari (ehm, uhm…)">Ehm</button>
+        </div>
+        <div id="trSelection" class="hidden">
+          <span id="trSelInfo"></span>
+          <button data-cmd="trCut">Taglia</button>
+          <button data-cmd="trInOut">In/Out</button>
+          <button data-cmd="trClear">×</button>
+        </div>
+        <div id="cutList" class="hidden"></div>
+        <div id="transcript"><p class="muted">Nessuna trascrizione. Importa un video e premi «Trascrivi».</p></div>
+      </div>
+    </section>
+
+    <section id="center">
+      <div id="monitor">
+        <div id="stage">
+          <div id="layers"></div>
+          <video id="previewVideo" class="hidden" preload="auto"></video>
+          <img id="frameImg" class="hidden" alt="">
+          <div id="stageBadge" class="hidden"></div>
+        </div>
+      </div>
+      <div id="transport">
+        <button data-cmd="toStart" title="Inizio (Home)">⏮</button>
+        <button data-cmd="frameBack" title="Fotogramma precedente (←)">◂</button>
+        <button data-cmd="playPause" id="btnPlay" title="Riproduci/Pausa (Spazio)">▶</button>
+        <button data-cmd="frameFwd" title="Fotogramma successivo (→)">▸</button>
+        <button data-cmd="toEnd" title="Fine (Fine)">⏭</button>
+        <span id="timecode">0:00.00</span>
+        <span class="muted">/</span>
+        <span id="durationText" class="muted">0:00.00</span>
+        <span id="inOutText" class="muted"></span>
+        <div class="spacer"></div>
+        <label class="muted small"><input type="checkbox" id="chkMute"> muto</label>
+      </div>
+    </section>
+
+    <section id="right" class="panel">
+      <nav class="tabs">
+        <button data-tab="claude" class="on">Claude</button>
+        <button data-tab="inspector">Proprietà</button>
+      </nav>
+      <div class="tab-body" data-tab-body="claude">
+        <div id="chat"></div>
+        <div id="chips">
+          <button data-prompt="Pulisci il parlato: togli pause lunghe, intercalari e ripetizioni. Prima mostrami il piano.">Pulisci il parlato</button>
+          <button data-prompt="Aggiungi i sottotitoli dalla trascrizione, una frase alla volta, in basso.">Sottotitoli</button>
+          <button data-prompt="Descrivi cosa c'è alla posizione della testina e suggerisci come migliorarlo.">Cosa c'è qui?</button>
+          <button data-prompt="Aggiungi un titolo iniziale di 3 secondi con dissolvenza.">Titolo iniziale</button>
+        </div>
+        <div id="chatInput">
+          <textarea id="chatText" rows="3" placeholder="Chiedi a Claude… (Ctrl+Invio per inviare)"></textarea>
+          <div class="row">
+            <button data-cmd="claudeReset" title="Nuova conversazione">Nuova</button>
+            <button data-cmd="claudeStop" id="btnStop" class="hidden">Interrompi</button>
+            <div class="spacer"></div>
+            <button data-cmd="claudeSend" id="btnSend" class="primary">Invia</button>
+          </div>
+        </div>
+      </div>
+      <div class="tab-body hidden" data-tab-body="inspector">
+        <div id="inspector"></div>
+      </div>
+    </section>
+  </main>
+
+  <div id="splitter" title="Trascina per ridimensionare"></div>
+
+  <section id="timeline">
+    <div id="tlBar">
+      <button data-cmd="addTrackVideo" title="Nuova traccia video">+ Video</button>
+      <button data-cmd="addTrackAudio" title="Nuova traccia audio">+ Audio</button>
+      <button data-cmd="addTrackText" title="Nuova traccia testi">+ Testo</button>
+      <label class="small"><input type="checkbox" id="chkSnap" checked> aggancio</label>
+      <div class="spacer"></div>
+      <span class="muted small">Zoom</span>
+      <input id="zoom" type="range" min="0" max="100" value="45">
+      <button data-cmd="zoomFit" title="Adatta">↔</button>
+    </div>
+    <div id="tlScroll">
+      <div id="tlInner">
+        <div id="ruler"><div class="corner"></div><canvas id="rulerCanvas"></canvas></div>
+        <div id="rows"></div>
+        <div id="inout" class="hidden"></div>
+        <div id="playhead"><div class="knob"></div></div>
+        <div id="snapLine" class="hidden"></div>
+      </div>
+    </div>
+  </section>
+
+  <footer id="status">
+    <span id="projectPath" class="muted"></span>
+    <div class="spacer"></div>
+    <div id="tasks"></div>
+  </footer>
+
+  <div id="toasts"></div>
+
+  <div id="welcome" class="overlay hidden">
+    <div class="card">
+      <h1>Video Editor</h1>
+      <p class="muted">Monta con la timeline oppure chiedi a Claude. Tutto resta in una cartella di progetto.</p>
+      <div class="row">
+        <button data-cmd="newProject" class="primary">Nuovo progetto</button>
+        <button data-cmd="openProject">Apri progetto…</button>
+      </div>
+      <div id="recent"></div>
+    </div>
+  </div>
+
+  <div id="settingsDlg" class="overlay hidden">
+    <div class="card">
+      <h2>Impostazioni</h2>
+      <label>Encoder video<select id="setEncoder"></select></label>
+      <label>Modello Whisper<select id="setWhisper"></select></label>
+      <label>Percorso di Claude Code (vuoto = automatico)<input id="setClaudePath" placeholder="C:\Users\…\.local\bin\claude.exe"></label>
+      <label>Modello Claude (vuoto = predefinito)<input id="setClaudeModel" placeholder="es. opus, sonnet"></label>
+      <p id="setChecks" class="small"></p>
+      <div class="row">
+        <div class="spacer"></div>
+        <button data-cmd="settingsClose">Annulla</button>
+        <button data-cmd="settingsSave" class="primary">Salva</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
