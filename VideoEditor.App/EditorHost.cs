@@ -256,6 +256,13 @@ public sealed class EditorHost : IDisposable
                     ed.MoveClip(Str(m!.AsObject(), "clipId")!, Num(m.AsObject(), "start")!.Value, Str(m.AsObject(), "trackId"));
                 label = "Spostate clip";
                 break;
+            case "setClips":
+            {
+                var ids = op["clipIds"]!.AsArray().Select(n => n!.GetValue<string>()).ToList();
+                foreach (var id in ids) ed.SetClip(id, op["patch"]!.AsObject().DeepClone().AsObject());
+                label = $"Modificate {ids.Count} clip";
+                break;
+            }
             case "trimClip":
                 ed.TrimClip(Str(op, "clipId")!, Num(op, "start"), Num(op, "end"));
                 label = "Rifilata clip";

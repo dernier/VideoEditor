@@ -503,6 +503,8 @@ function renderInspector() {
   const box = $('#inspector');
   if (!S.project) { box.innerHTML = ''; return; }
   const ids = [...S.selection];
+  const texts = ids.map(findClip).filter(f => f?.clip.text != null);
+  if (ids.length > 1 && texts.length === ids.length) { renderMultiTextInspector(box, texts); return; }
   if (ids.length !== 1) {
     const st = S.project.settings;
     box.innerHTML = `
@@ -540,7 +542,8 @@ function renderInspector() {
     ${isText ? field('Testo', `<textarea data-k="text">${esc(c.text)}</textarea>`) : ''}
     ${isText ? field('Dimensione', `<input type="number" data-s="fontSize" value="${st.fontSize ?? 64}">`) : ''}
     ${isText ? field('Colore', colorInput('color', st.color || '#FFFFFF', 's')) : ''}
-    ${isText ? field('Riquadro', colorInput('boxColor', st.boxColor || '', 's')) : ''}
+    ${isText ? field('Riquadro', colorInput('boxColor', st.boxColor || '', 's', BOX_PALETTE)) : ''}
+    ${isText ? field('Colore contorno', colorInput('borderColor', st.borderColor || '', 's', ['#000000', '#FFFFFF', '#FF453A', '#0A84FF', ''])) : ''}
     ${isText ? field('Contorno', `<input type="number" data-s="borderWidth" value="${st.borderWidth ?? 2}" step="0.5">`) : ''}
     ${visual ? field('Posizione X', range('x', c.x, 0, 1, 0.01)) : ''}
     ${visual ? field('Posizione Y', range('y', c.y, 0, 1, 0.01)) : ''}
@@ -574,6 +577,28 @@ function renderInspector() {
   const styleAll = box.querySelector('[data-x="styleAll"]');
   if (styleAll) styleAll.onclick = () => op({ op: 'applyStyleToTrack', clipId: c.id });
   box.querySelector('[data-x="inout"]').onclick = () => setInOut(c.start, clipEnd(c));
+}
+
+/** Più testi selezionati (Ctrl/Maiusc+clic): colore, riquadro e dimensione per tutti insieme. */
+function renderMultiTextInspector(box, texts) {
+  const st = texts[0].clip.style || {};
+  box.innerHTML = `
+    <h3>${texts.length} testi selezionati</h3>
+    <p class="note">Le modifiche valgono per tutti i testi selezionati.</p>
+    ${field('Colore', colorInput('color', st.color || '#FFFFFF', 's'))}
+    ${field('Riquadro', colorInput('boxColor', st.boxColor || '', 's', BOX_PALETTE))}
+    ${field('Dimensione', `<input type="number" data-s="fontSize" value="${st.fontSize ?? 64}">`)}`;
+  const ids = texts.map(f => f.clip.id);
+  box.querySelectorAll('[data-s]').forEach(inp => inp.addEventListener('change', () => {
+    let v = inp.value;
+    if (inp.type === 'number') v = +v;
+    if (v === '') v = null;
+    op({ op: 'setClips', clipIds: ids, patch: { style: { [inp.dataset.s]: v } } });
+  }));
+  box.querySelectorAll('input[type=color]').forEach(inp => {
+    inp.addEventListener('input', () => { inp.previousElementSibling.value = inp.value.toUpperCase(); });
+    inp.addEventListener('change', () => inp.previousElementSibling.dispatchEvent(new Event('change')));
+  });
 }
 
 function renderMaskInspector(box, c) {
@@ -753,10 +778,30 @@ function updateDraw(p) {
 const field = (label, input) => `<div class="field"><label>${label}</label>${input}</div>`;
 const num = (k, v) => `<input type="number" data-k="${k}" value="${+(+v).toFixed(3)}" step="0.01" min="0">`;
 const range = (k, v, min, max, step) => `<input type="range" data-k="${k}" value="${v}" min="${min}" max="${max}" step="${step}" title="${v}">`;
-function colorInput(key, value, kind) {
+const PALETTE = ['#FFFFFF', '#FFD60A', '#FF9F0A', '#FF453A', '#FF2D95', '#BF5AF2', '#0A84FF', '#64D2FF', '#30D158', '#8E8E93', '#000000'];
+const BOX_PALETTE = ['', '#000000A0', '#000000', '#FFFFFFCC', '#FFD60A', '#FF453A', '#0A84FF', '#30D158'];
+
+/** Campo colore: tavolozza a un clic, selettore completo e codice esadecimale (#RRGGBB o #RRGGBBAA per la trasparenza). */
+function colorInput(key, value, kind, palette = PALETTE) {
   const hex = /^#[0-9a-f]{6}/i.test(value || '') ? value.slice(0, 7) : '#000000';
-  return `<div class="color"><input type="text" data-${kind}="${key}" value="${esc(value || '')}" placeholder="#RRGGBB o #RRGGBBAA"><input type="color" value="${hex}"></div>`;
+  const cur = (value || '').toUpperCase();
+  const sw = palette.map(c => `<button type="button" class="swatch${c.toUpperCase() === cur ? ' on' : ''}${c ? '' : ' none'}" data-color="${c}"
+      title="${c || 'Nessuno'}" style="${c ? `background:${c}` : ''}"></button>`).join('');
+  return `<div class="color-wrap"><div class="swatches">${sw}</div>
+    <div class="color"><input type="text" data-${kind}="${key}" value="${esc(value || '')}" placeholder="#RRGGBB o #RRGGBBAA"><input type="color" value="${hex}" title="Scegli un colore qualsiasi"></div></div>`;
 }
+
+// Clic su un colore della tavolozza: scrive il valore nel campo e lo applica.
+document.getElementById('inspector').addEventListener('click', e => {
+  const b = e.target.closest('.swatch');
+  if (!b) return;
+  const wrap = b.closest('.color-wrap');
+  const input = wrap.querySelector('input[type=text]');
+  input.value = b.dataset.color;
+  wrap.querySelectorAll('.swatch').forEach(x => x.classList.toggle('on', x === b));
+  if (/^#[0-9a-f]{6}/i.test(b.dataset.color)) wrap.querySelector('input[type=color]').value = b.dataset.color.slice(0, 7).toLowerCase();
+  input.dispatchEvent(new Event('change'));
+});
 
 // ================= Claude =================
 

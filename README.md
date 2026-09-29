@@ -113,6 +113,7 @@ Tutte le operazioni si annullano con Ctrl+Z, anche quelle fatte da Claude o da r
 | Pannello Claude | chip, Invia, Interrompi, Nuova | richieste pronte, invia (Ctrl+Invio), ferma Claude, nuova conversazione |
 | Pannello Proprietà | campi della clip | tempi, testo e stile, posizione, scala, opacità, volume, dissolvenze; maschere: effetto, forma, keyframe |
 | | Applica stile a tutta la traccia | copia stile e posizione del testo selezionato su tutti i testi della traccia |
+| | tavolozze colore | colore del testo, del riquadro e del contorno con un clic (o qualsiasi colore dal selettore / codice #RRGGBB, #RRGGBBAA per la trasparenza); con più testi selezionati (Ctrl+clic) il colore vale per tutti |
 
 ### Scorciatoie
 
