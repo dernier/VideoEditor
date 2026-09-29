@@ -112,34 +112,61 @@ public sealed partial class ProjectFileServer(CoreWebView2 core, string host)
     [GeneratedRegex(@"bytes=(\d*)-(\d*)")]
     private static partial Regex RangeRegex();
 
-    /// <summary>Espone solo <c>count</c> byte a partire dalla posizione corrente del flusso sottostante.</summary>
-    private sealed class SliceStream(Stream inner, long length) : Stream
+    /// <summary>
+    /// Espone solo <c>length</c> byte del flusso sottostante, a partire dalla sua posizione al momento
+    /// della creazione. È navigabile (Seek/Position) all'interno dell'intervallo: il WebView2 lo usa.
+    /// </summary>
+    private sealed class SliceStream : Stream
     {
-        private readonly long _length = length;
-        private long _remaining = length;
+        private readonly Stream _inner;
+        private readonly long _start;
+        private readonly long _length;
+
+        public SliceStream(Stream inner, long length)
+        {
+            _inner = inner;
+            _start = inner.Position;
+            _length = length;
+        }
 
         public override bool CanRead => true;
-        public override bool CanSeek => false;
+        public override bool CanSeek => true;
         public override bool CanWrite => false;
         public override long Length => _length;
-        public override long Position { get => _length - _remaining; set => throw new NotSupportedException(); }
+
+        public override long Position
+        {
+            get => _inner.Position - _start;
+            set => Seek(value, SeekOrigin.Begin);
+        }
 
         public override int Read(byte[] buffer, int offset, int size)
         {
-            if (_remaining <= 0) return 0;
-            var n = inner.Read(buffer, offset, (int)Math.Min(size, _remaining));
-            _remaining -= n;
-            return n;
+            var remaining = _length - Position;
+            if (remaining <= 0) return 0;
+            return _inner.Read(buffer, offset, (int)Math.Min(size, remaining));
+        }
+
+        public override long Seek(long offset, SeekOrigin origin)
+        {
+            var target = origin switch
+            {
+                SeekOrigin.Begin => offset,
+                SeekOrigin.Current => Position + offset,
+                _ => _length + offset,
+            };
+            target = Math.Clamp(target, 0, _length);
+            _inner.Position = _start + target;
+            return target;
         }
 
         public override void Flush() { }
-        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
         public override void SetLength(long value) => throw new NotSupportedException();
         public override void Write(byte[] buffer, int offset, int size) => throw new NotSupportedException();
 
         protected override void Dispose(bool disposing)
         {
-            if (disposing) inner.Dispose();
+            if (disposing) _inner.Dispose();
             base.Dispose(disposing);
         }
     }
