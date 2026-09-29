@@ -183,6 +183,23 @@ export class Player {
       el.src = src;
     }
     l = { el, media, src, kind: track.kind };
+    if (media) {
+      // Se il proxy non si carica lo si dice sul monitor, invece di restare neri.
+      media.addEventListener('error', () => {
+        const err = media.error;
+        const msg = `Impossibile riprodurre ${asset?.name || ''}\n(codice ${err?.code ?? '?'}: ${err?.message || 'errore sconosciuto'})\n${src}`;
+        console.error(msg);
+        if (this.layers.get(clip.id) !== l) return;
+        const ph = document.createElement('div');
+        ph.className = 'placeholder';
+        ph.style.whiteSpace = 'pre-wrap';
+        ph.style.textAlign = 'center';
+        ph.textContent = msg;
+        media.replaceWith(ph);
+        l.el = ph;
+        l.media = null;
+      });
+    }
     this.layers.set(clip.id, l);
     this.layersEl.appendChild(el);
     return l;

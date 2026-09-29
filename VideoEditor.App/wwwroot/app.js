@@ -212,6 +212,7 @@ $('#chkMute').addEventListener('change', e => { player.muted = e.target.checked;
 // ================= Scorciatoie =================
 
 document.addEventListener('keydown', e => {
+  if (e.key === 'F12' || (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'i')) { e.preventDefault(); send('devtools'); return; }
   if (e.target.matches('input, textarea, select')) {
     if (e.target.id === 'chatText' && e.key === 'Enter' && e.ctrlKey) { e.preventDefault(); sendChat(); }
     return;

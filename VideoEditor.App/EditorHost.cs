@@ -96,6 +96,7 @@ public sealed class EditorHost : IDisposable
                         Process.Start(new ProcessStartInfo("explorer.exe", Str(msg, "sub") is { } sub ? Path.Combine(_store.Directory, sub) : _store.Directory) { UseShellExecute = true });
                     break;
                 case "openTerminal": OpenTerminal(); break;
+                case "devtools": _win.OpenDevTools(); break;
             }
         }
         catch (Exception ex) when (ex is EditException or InvalidOperationException or ArgumentException or IOException

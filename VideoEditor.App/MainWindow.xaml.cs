@@ -12,6 +12,8 @@ public partial class MainWindow : Window
 
     private readonly EditorHost _host;
     private readonly string? _startupProject;
+    private ProjectFileServer? _files;
+    private string? _pendingRoot;
 
     public MainWindow(string? startupProject)
     {
@@ -44,13 +46,12 @@ public partial class MainWindow : Window
         core.Settings.AreDefaultContextMenusEnabled = false;
         core.Settings.IsStatusBarEnabled = false;
         core.Settings.AreBrowserAcceleratorKeysEnabled = false;
-#if DEBUG
+        // Strumenti di sviluppo sempre disponibili (F12 dall'editor) per la diagnosi.
         core.Settings.AreDevToolsEnabled = true;
-#else
-        core.Settings.AreDevToolsEnabled = false;
-#endif
         core.SetVirtualHostNameToFolderMapping(AppHost, Path.Combine(AppContext.BaseDirectory, "wwwroot"),
             CoreWebView2HostResourceAccessKind.Allow);
+        _files = new ProjectFileServer(core, ProjectHost) { RootDirectory = _pendingRoot };
+        _files.Attach();
         core.WebMessageReceived += OnWebMessage;
         core.NavigationCompleted += (_, _) => Loading.Visibility = Visibility.Collapsed;
         core.Navigate($"https://{AppHost}/index.html");
@@ -59,11 +60,13 @@ public partial class MainWindow : Window
     /// <summary>Mappa la cartella del progetto sull'host virtuale usato per proxy, anteprime e fotogrammi.</summary>
     public void MapProjectFolder(string directory)
     {
-        var core = Web.CoreWebView2;
-        if (core is null) return;
-        try { core.ClearVirtualHostNameToFolderMapping(ProjectHost); } catch (ArgumentException) { }
-        core.SetVirtualHostNameToFolderMapping(ProjectHost, directory, CoreWebView2HostResourceAccessKind.Allow);
+        // Niente SetVirtualHostNameToFolderMapping: aggiunto dopo il caricamento della pagina
+        // non sempre vale per i video. I file li serve ProjectFileServer.
+        _pendingRoot = directory;
+        if (_files is not null) _files.RootDirectory = directory;
     }
+
+    public void OpenDevTools() => Web.CoreWebView2?.OpenDevToolsWindow();
 
     /// <summary>Invia un messaggio alla pagina (thread-safe).</summary>
     public void Post(JsonObject message)
