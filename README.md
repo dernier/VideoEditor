@@ -66,7 +66,14 @@ La CI su GitHub pubblica anche l'artefatto `video-editor-windows` pronto da scar
    (righe bilanciate, max 42 caratteri — modificabile —, intercalari esclusi). Correggi il testo nel pannello
    Proprietà; cambia stile a uno e premi **Applica stile a tutta la traccia**; **Esporta SRT** per YouTube.
    Sono testi veri: finiscono anche "impressi" nel video esportato (nascondi la traccia per non averli).
-8. **Esporta**: MP4 con NVENC (H.264, HEVC o AV1 dalle impostazioni ⚙), audio AAC; musica con ducking automatico sotto il parlato.
+8. **Formato** (come in CapCut): nel menu *Formato* in alto scegli 16:9, 4:3, 2.35:1, 2:1, 1.85:1, 9:16, 3:4,
+   5,8" (telefono), 1:1 o *Originale*. Il lato corto resta invariato (1920×1080 → 9:16 = 1080×1920) ed è il
+   formato del video esportato. Si apre **Reinquadra**: vedi tutto il video con la cornice del formato sopra;
+   fuori dalla cornice è scurito (verrà tagliato). Trascina la cornice per spostarla, gli angoli per
+   ingrandirla o rimpicciolirla (proporzioni bloccate): più piccola del video = ritaglio, più grande = video
+   rimpicciolito con bande nere. **Riempi** e **Adatta** fanno le due cose in un clic; di default vale per
+   tutti i pezzi dello stesso video. **⛶ Reinquadra** riapre la cornice per la clip sotto la linea rossa.
+9. **Esporta**: MP4 con NVENC (H.264, HEVC o AV1 dalle impostazioni ⚙), audio AAC; musica con ducking automatico sotto il parlato.
 
 Tutte le operazioni si annullano con Ctrl+Z, anche quelle fatte da Claude o da riga di comando.
 
@@ -77,6 +84,8 @@ Tutte le operazioni si annullano con Ctrl+Z, anche quelle fatte da Claude o da r
 | Barra in alto | Nuovo / Apri / Importa | nuovo progetto in una cartella, apre un progetto, importa file (anche trascinandoli) |
 | | Live / Render | monitor in tempo reale (proxy, approssimato) o anteprima renderizzata (identica all'export) |
 | | ⟳ Anteprima | renderizza con ffmpeg l'anteprima fedele e passa in modalità Render |
+| | Formato… | rapporto d'aspetto del video in uscita (16:9, 9:16, 1:1, 2.35:1…); apre la reinquadratura |
+| | ⛶ Reinquadra | cornice del formato sul video: spostala e ridimensionala; Riempi / Adatta |
 | | 📷 | fotogramma esatto alla testina, renderizzato da ffmpeg |
 | | Terminale | prompt nella cartella del progetto con `vedit` nel PATH (per `claude` interattivo) |
 | | Esporta | video finale MP4 (NVENC) |
@@ -142,6 +151,7 @@ vedit import <file...> [--add] | probe | proxy
 vedit add | text | move | trim | set | split | remove | cut | gap | track | marker
 vedit mask add --at T --dur D --rect x,y,w,h [--shape rect] [--effect blur|pixelate|solid] | mask key <clip> <T> x,y,w,h
 vedit subtitles create [--max-chars 42] | subtitles export file.srt | subtitles style <clip>
+vedit aspect 9:16 [--fill] | reframe <clip> --fill | --fit | --frame fx,fy,fw [--only]
 vedit transcribe | transcript [--words|--srt|--json] | find "frase" | fillers | silences
 vedit render [--preview] [--encoder hevc_nvenc] | frame <T> [--grid]
 vedit app status | seek <T> | play | pause | select <clip> | reload | say "msg"

@@ -46,6 +46,18 @@ Rispondi sempre in italiano.
 7. Controlla: `vedit validate`, un fotogramma con `vedit frame <T>` (puoi leggere il PNG per vederlo),
    un'anteprima con `vedit render --preview` (file in `output/anteprima.mp4`).
 
+## Formato (verticale, quadrato, cinema) e reinquadratura
+
+- `vedit aspect 9:16` (anche 16:9, 4:3, 2.35:1, 2:1, 1.85:1, 3:4, 5.8in, 1:1, originale) cambia il formato
+  di uscita mantenendo il lato corto; i video restano interi con bande nere, con `--fill` vengono ritagliati.
+- Inquadratura di una clip: `vedit reframe <clipId> --frame fx,fy,fw` = cornice sul video **sorgente**
+  (centro fx,fy e larghezza fw come frazioni del video; l'altezza segue dal formato). Esempio: in 9:16 da un
+  video 16:9 la cornice piena è larga ~0.32; per inquadrare chi sta a destra `--frame 0.72,0.5,0.32`.
+  Vale per tutti i pezzi dello stesso video (`--only` per una sola clip). `--fill` / `--fit` per centrare.
+- Per trovare il soggetto guarda il sorgente: `vedit frame <T> --grid` dopo `vedit aspect originale`, oppure
+  deduci la posizione dalla trascrizione/contesto; poi controlla il risultato con `vedit frame <T>`.
+- Dopo un cambio di formato ricontrolla testi (dimensione) e maschere (sono in coordinate del fotogramma).
+
 ## Oscurare volti, nomi, email, targhe
 
 Le maschere sulla traccia `M1` sfocano (`blur`), pixelano (`pixelate`) o coprono (`solid`) una zona di

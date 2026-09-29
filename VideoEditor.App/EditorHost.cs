@@ -343,6 +343,25 @@ public sealed class EditorHost : IDisposable
                 ed.RemoveMaskKey(Str(op, "clipId")!, Num(op, "time") ?? _time);
                 label = "Rimosso keyframe";
                 break;
+            case "setAspect":
+            {
+                var id = Str(op, "ratio") ?? "16:9";
+                var ratio = id == "original" ? ed.OriginalAspect() ?? throw new EditException("Nessun video da cui prendere il formato originale.")
+                                             : Reframe.ParseRatio(id);
+                var (w, h, _) = ed.ApplyAspect(ratio, op["fill"]?.GetValue<bool>() == true);
+                label = $"Formato {w}×{h}";
+                break;
+            }
+            case "reframe":
+            {
+                var all = op["all"]?.GetValue<bool>() != false;
+                var mode = Str(op, "mode");
+                var changed = mode is "fill" or "fit"
+                    ? ed.ReframeFill(Str(op, "clipId")!, mode == "fill", all)
+                    : ed.ReframeClip(Str(op, "clipId")!, Num(op, "fx")!.Value, Num(op, "fy")!.Value, Num(op, "fw")!.Value, all);
+                label = changed.Count > 1 ? $"Reinquadrate {changed.Count} clip" : "Reinquadrata clip";
+                break;
+            }
             case "createSubtitles":
             {
                 var words = TranscriptTools.ToWords(TranscriptTools.ToTimeline(_project, _store!.LoadTranscript));
@@ -821,6 +840,7 @@ public sealed class EditorHost : IDisposable
         ["settings"] = JsonSerializer.SerializeToNode(_settings, Json.Options),
         ["encoders"] = ToArray(Encoders.Known),
         ["whisperModels"] = ToArray(WhisperTranscriber.Models.Keys),
+        ["aspects"] = new JsonArray(Reframe.Presets.Select(p => (JsonNode)new JsonObject { ["id"] = p.Id, ["label"] = p.Label, ["ratio"] = p.Ratio }).ToArray()),
         ["claudeFound"] = (_settings.ClaudePath is { Length: > 0 } cp && File.Exists(cp)) || ClaudeCliSession.Locate() is not null,
         ["ffmpegFound"] = FfmpegAvailable(),
     });

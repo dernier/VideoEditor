@@ -310,3 +310,23 @@ body.dragging-files::after {
   content: "Rilascia per importare"; position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
   font-size: 24px; background: #4f8cff33; border: 3px dashed var(--accent); z-index: 60; pointer-events: none;
 }
+
+/* ---------- Reinquadratura ---------- */
+#toolbar select { padding: 3px 6px; }
+#monitor { position: relative; }
+#reframe { position: absolute; inset: 0; z-index: 30; background: #0b0c10; display: flex; flex-direction: column; }
+#reframe .rf-bar { display: flex; gap: 8px; align-items: center; padding: 6px 10px; background: var(--panel); border-bottom: 1px solid var(--line); }
+#reframe .rf-area { position: relative; flex: 1; overflow: hidden; }
+#rfVideo, #rfImg { position: absolute; object-fit: fill; pointer-events: none; outline: 1px dashed #8b93a1; background: #222; }
+#rfFrame {
+  position: absolute; border: 2px solid #ffd166; cursor: move; z-index: 2;
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.62);
+  background-image: linear-gradient(#ffffff22 1px, transparent 1px), linear-gradient(90deg, #ffffff22 1px, transparent 1px);
+  background-size: 33.333% 33.333%; background-position: -1px -1px;
+}
+#rfFrame .rf-label { position: absolute; left: 4px; top: 2px; font-size: 11px; color: #ffd166; text-shadow: 0 1px 2px #000; }
+#rfFrame .h { position: absolute; width: 14px; height: 14px; background: #ffd166; border: 1px solid #000; }
+#rfFrame .h.nw { left: -8px; top: -8px; cursor: nwse-resize; }
+#rfFrame .h.ne { right: -8px; top: -8px; cursor: nesw-resize; }
+#rfFrame .h.sw { left: -8px; bottom: -8px; cursor: nesw-resize; }
+#rfFrame .h.se { right: -8px; bottom: -8px; cursor: nwse-resize; }

@@ -408,6 +408,84 @@ public sealed class TimelineEditor(Project project)
         if (Project.Markers.RemoveAll(m => m.Id == id) == 0) throw new EditException($"Marcatore {id} non trovato.");
     }
 
+    // ---------- Formato di uscita e reinquadratura ----------
+
+    /// <summary>
+    /// Cambia il formato di uscita mantenendo il lato corto attuale (es. 1920×1080 → 9:16 = 1080×1920).
+    /// Le clip restano adattate (bande nere); per ritagliare si usa <see cref="ReframeClip"/>.
+    /// </summary>
+    public (int Width, int Height) SetAspect(double ratio, int? shortSide = null)
+    {
+        if (ratio is < 0.1 or > 10) throw new EditException("Rapporto d'aspetto fuori scala.");
+        var s = Project.Settings;
+        var (w, h) = Reframe.SizeFor(ratio, shortSide ?? Math.Min(s.Width, s.Height));
+        s.Width = w;
+        s.Height = h;
+        return (w, h);
+    }
+
+    /// <summary>
+    /// Cambia formato e reimposta l'inquadratura dei video principali (scala ≥ 1, non i riquadri
+    /// picture-in-picture): interi con bande nere, oppure ritagliati per riempire con <paramref name="fill"/>.
+    /// Restituisce dimensioni e numero di clip reinquadrate.
+    /// </summary>
+    public (int Width, int Height, int Clips) ApplyAspect(double ratio, bool fill = false)
+    {
+        var (w, h) = SetAspect(ratio);
+        var n = 0;
+        foreach (var t in Project.Tracks.Where(t => t.Kind == TrackKind.Video && !t.Locked))
+            foreach (var c in t.Clips.Where(c => c.Scale >= 0.999 && c.AssetId is not null && Project.FindAsset(c.AssetId) is { Width: > 0, Height: > 0 }).ToList())
+            {
+                ReframeFill(c.Id, fill);
+                n++;
+            }
+        return (w, h, n);
+    }
+
+    /// <summary>Rapporto del primo video del progetto (per «Originale»).</summary>
+    public double? OriginalAspect() =>
+        Project.Tracks.Where(t => t.Kind == TrackKind.Video).SelectMany(t => t.Clips)
+            .Select(c => c.AssetId is null ? null : Project.FindAsset(c.AssetId))
+            .Concat(Project.Assets)
+            .Where(a => a is { Kind: AssetKind.Video, Width: > 0, Height: > 0 })
+            .Select(a => (double?)a!.Width / a.Height).FirstOrDefault();
+
+    /// <summary>
+    /// Reinquadra una clip con la cornice indicata (vedi <see cref="Reframe"/>). Con <paramref name="allPieces"/>
+    /// la stessa inquadratura va a tutte le clip dello stesso file sulla stessa traccia (i pezzi dopo i tagli).
+    /// Restituisce le clip modificate.
+    /// </summary>
+    public List<Clip> ReframeClip(string clipId, double fx, double fy, double fw, bool allPieces = false)
+    {
+        var (track, clip) = GetClip(clipId);
+        EnsureUnlocked(track);
+        var asset = clip.AssetId is null ? null : Project.FindAsset(clip.AssetId);
+        if (asset is not { Width: > 0, Height: > 0 }) throw new EditException("Si possono reinquadrare solo clip video o immagini.");
+        fw = Math.Clamp(fw, 0.02, 20);
+        var s = Project.Settings;
+        var (scale, x, y) = Reframe.ToTransform(fx, fy, fw, s.Width, s.Height, asset.Width, asset.Height);
+        var targets = allPieces ? track.Clips.Where(c => c.AssetId == clip.AssetId).ToList() : [clip];
+        foreach (var c in targets)
+        {
+            c.Scale = Math.Round(scale, 5);
+            c.X = Math.Round(x, 5);
+            c.Y = Math.Round(y, 5);
+        }
+        return targets;
+    }
+
+    /// <summary>«Riempi» (ritaglia il minimo per coprire l'uscita) o «Adatta» (tutto il video, con bande).</summary>
+    public List<Clip> ReframeFill(string clipId, bool fill, bool allPieces = false)
+    {
+        var (_, clip) = GetClip(clipId);
+        var asset = clip.AssetId is null ? null : Project.FindAsset(clip.AssetId);
+        if (asset is not { Width: > 0, Height: > 0 }) throw new EditException("Si possono reinquadrare solo clip video o immagini.");
+        var s = Project.Settings;
+        var fw = fill ? Reframe.FillWidth(s.Width, s.Height, asset.Width, asset.Height)
+                      : Reframe.FitWidth(s.Width, s.Height, asset.Width, asset.Height);
+        return ReframeClip(clipId, 0.5, 0.5, fw, allPieces);
+    }
+
     // ---------- Sottotitoli ----------
 
     /// <summary>Traccia dei sottotitoli (se esiste).</summary>

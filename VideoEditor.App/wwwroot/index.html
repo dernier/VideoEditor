@@ -21,6 +21,10 @@
       <button data-cmd="renderPreview" title="Renderizza l'anteprima fedele (veloce con NVENC)">⟳ Anteprima</button>
       <button data-cmd="frame" title="Fotogramma esatto renderizzato da ffmpeg">📷</button>
     </div>
+    <div class="group">
+      <select id="aspectSel" title="Formato del video in uscita (rapporto d'aspetto)"><option value="">Formato…</option></select>
+      <button data-cmd="reframe" title="Reinquadra: sposta e ridimensiona la cornice del formato sul video">⛶ Reinquadra</button>
+    </div>
     <div class="spacer"></div>
     <div class="group">
       <button data-cmd="openTerminal" title="Terminale nella cartella del progetto (per 'claude' interattivo)">Terminale</button>
@@ -66,6 +70,21 @@
 
     <section id="center">
       <div id="monitor">
+        <div id="reframe" class="hidden">
+          <div class="rf-bar">
+            <b>Reinquadra</b> <span id="rfInfo" class="muted small"></span>
+            <div class="spacer"></div>
+            <button data-rf="fill" title="La cornice più grande dentro il video: riempie il formato tagliando il minimo">Riempi</button>
+            <button data-rf="fit" title="Tutto il video dentro il formato, con bande nere">Adatta</button>
+            <label class="small" title="Applica la stessa inquadratura a tutti i pezzi dello stesso video su questa traccia"><input type="checkbox" id="rfAll" checked> tutti i pezzi di questo video</label>
+            <button data-rf="done" class="primary">Fine</button>
+          </div>
+          <div class="rf-area">
+            <video id="rfVideo" muted preload="auto"></video>
+            <img id="rfImg" class="hidden" alt="">
+            <div id="rfFrame"><span class="rf-label"></span><div class="h nw"></div><div class="h ne"></div><div class="h sw"></div><div class="h se"></div></div>
+          </div>
+        </div>
         <div id="stage">
           <div id="layers"></div>
           <video id="previewVideo" class="hidden" preload="auto"></video>

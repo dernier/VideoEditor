@@ -55,6 +55,9 @@ public static class MediaProbe
             asset.HasVideo = true;
             asset.Width = v.TryGetProperty("width", out var w) ? w.GetInt32() : 0;
             asset.Height = v.TryGetProperty("height", out var h) ? h.GetInt32() : 0;
+            // Video del telefono girati in verticale: salvati orizzontali con una rotazione di ±90°,
+            // che ffmpeg applica in decodifica. Le dimensioni utili sono quindi scambiate.
+            if (Math.Abs(Rotation(v)) % 180 == 90) (asset.Width, asset.Height) = (asset.Height, asset.Width);
             asset.Codec = codec;
             asset.Fps = v.TryGetProperty("avg_frame_rate", out var fr) ? ParseRate(fr.GetString()) : 0;
             if (asset.Fps <= 0 && v.TryGetProperty("r_frame_rate", out var rfr)) asset.Fps = ParseRate(rfr.GetString());
@@ -75,6 +78,18 @@ public static class MediaProbe
         }
         asset.Duration = Math.Round(duration, 3);
         return asset;
+    }
+
+    private static int Rotation(JsonElement stream)
+    {
+        if (stream.TryGetProperty("side_data_list", out var sd) && sd.ValueKind == JsonValueKind.Array)
+            foreach (var d in sd.EnumerateArray())
+                if (d.TryGetProperty("rotation", out var r) && r.TryGetDouble(out var deg))
+                    return (int)Math.Round(deg);
+        if (stream.TryGetProperty("tags", out var tags) && tags.TryGetProperty("rotate", out var rot) &&
+            int.TryParse(rot.GetString(), out var tagDeg))
+            return tagDeg;
+        return 0;
     }
 
     private static double ParseDouble(string? s) =>

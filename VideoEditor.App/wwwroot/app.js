@@ -3,6 +3,7 @@
 import { S, send, op, onHost, sendWithFiles, assetOf, clipEnd, findClip, fps, fmt, esc, maskRectAt } from './state.js';
 import { Timeline } from './timeline.js';
 import { Player } from './player.js';
+import { Reframer, fillAspectMenu } from './reframe.js';
 
 const $ = sel => document.querySelector(sel);
 const $$ = sel => [...document.querySelectorAll(sel)];
@@ -13,6 +14,8 @@ let trSel = null; // { a, b } indici di parole selezionate
 let claudeBubble = null;
 
 const player = new Player($('#stage'), (t, playing) => onTimeUpdate(t, playing));
+const reframer = new Reframer(player, (text, level) => toast(text, level));
+let pendingReframe = false;
 const timeline = new Timeline({
   onSeek: t => seek(t),
   onSelectionChange: () => { renderInspector(); reportState(true); },
@@ -63,7 +66,7 @@ onHost(msg => {
       if (!msg.running) { claudeBubble = null; $$('.typing').forEach(e => e.remove()); }
       else addChat('typing', '');
       break;
-    case 'appSettings': S.appSettings = msg; fillSettings(); break;
+    case 'appSettings': S.appSettings = msg; fillSettings(); fillAspectMenu($('#aspectSel'), msg.aspects); break;
   }
 });
 
@@ -93,6 +96,9 @@ function onProject(msg) {
   renderBin();
   renderInspector();
   if (player.t > S.duration) seek(S.duration);
+  fillAspectMenu($('#aspectSel'), S.appSettings?.aspects);
+  if (pendingReframe) { pendingReframe = false; reframer.open(); }
+  else reframer.refresh();
 }
 
 // ================= Tempo e stato =================
@@ -110,6 +116,7 @@ function onTimeUpdate(t, playing) {
     timeline.setTime(t);
     if (playing) timeline.follow();
     highlightWord(t);
+    if (reframer.isOpen && !playing) reframer.refresh();
   }
   updateMaskEditor(t, playing);
   $('#btnPlay').textContent = playing ? '❚❚' : '▶';
@@ -174,6 +181,7 @@ const commands = {
     op({ op: 'createSubtitles', maxChars: +$('#subChars').value || 42, lines: 2 });
   },
   exportSrt: () => send('exportSrt'),
+  reframe: () => reframer.open(),
   addTrackMask: () => op({ op: 'addTrack', kind: 'mask' }),
   renderPreview: () => send('render', { preview: true }),
   frame: () => { player.pause(); send('frame', { time: player.t }); },
@@ -226,6 +234,14 @@ document.addEventListener('click', e => {
 });
 
 $('#chkMute').addEventListener('change', e => { player.muted = e.target.checked; });
+$('#aspectSel').addEventListener('change', e => {
+  const v = e.target.value;
+  e.target.value = '';
+  e.target.blur();
+  if (!v || !S.project) return;
+  pendingReframe = true; // dopo il cambio di formato si apre subito la reinquadratura
+  op({ op: 'setAspect', ratio: v });
+});
 $('#addTrackSel').addEventListener('change', e => {
   if (e.target.value) op({ op: 'addTrack', kind: e.target.value });
   e.target.value = '';
@@ -262,7 +278,7 @@ document.addEventListener('keydown', e => {
     'b': () => startMaskDraw(e.shiftKey ? 'rect' : 'ellipse'),
     '+': () => timeline.setZoom(timeline.zoom * 1.3, true),
     '-': () => timeline.setZoom(timeline.zoom / 1.3, true),
-    'Escape': () => { if (drawShape) { endMaskDraw(); return; } S.selection.clear(); timeline.updateSelection(); renderInspector(); setInOut(null, null); },
+    'Escape': () => { if (reframer.isOpen) { reframer.close(); return; } if (drawShape) { endMaskDraw(); return; } S.selection.clear(); timeline.updateSelection(); renderInspector(); setInOut(null, null); },
   };
   if (ctrl && k.toLowerCase() === 'z') { e.preventDefault(); send(e.shiftKey ? 'redo' : 'undo'); return; }
   if (ctrl && k.toLowerCase() === 'y') { e.preventDefault(); send('redo'); return; }

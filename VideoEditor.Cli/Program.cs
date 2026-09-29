@@ -73,6 +73,15 @@ namespace VideoEditor.Cli
               track add <video|audio|text|mask> [--name N] [--index I] | track remove ID | track move ID I | track set ID chiave=valore
               marker add <T> "<etichetta>" | marker remove ID
 
+            FORMATO (rapporto d'aspetto dell'uscita) E REINQUADRATURA
+              aspect <16:9|4:3|2.35:1|2:1|1.85:1|9:16|3:4|5.8in|1:1|originale|W:H> [--fill]
+                                           cambia il formato di uscita (lato corto invariato); --fill ritaglia
+                                           i video per riempire, altrimenti restano interi con bande nere
+              reframe <clipId> --fill | --fit | --frame fx,fy,fw [--only]
+                                           inquadratura della clip: cornice sul video sorgente (centro fx,fy e
+                                           larghezza fw in frazioni del video); di default vale per tutti i
+                                           pezzi dello stesso file sulla traccia, --only solo per questa clip
+
             OSCURAMENTO (volti, nomi, email… — coordinate 0-1: x,y = centro, w,h = dimensioni)
               mask add --at T --dur D [--rect 0.5,0.4,0.2,0.3] [--effect blur|pixelate|solid] [--shape ellipse|rect]
                        [--strength 30] [--color #000000] [--track M1]
@@ -226,6 +235,39 @@ namespace VideoEditor.Cli
                     }, editor);
                 case "track": return Save(store, project, label, () => Track(editor, a), editor);
                 case "mask": return Save(store, project, label, () => Mask(editor, a), editor);
+                case "aspect":
+                    if (a.Positional.FirstOrDefault() is null or "list")
+                    {
+                        Console.WriteLine($"Attuale: {project.Settings.Width}x{project.Settings.Height} ({F((double)project.Settings.Width / project.Settings.Height)}:1)");
+                        foreach (var p in Reframe.Presets) Console.WriteLine($"  {p.Id,-8} {p.Label}");
+                        return 0;
+                    }
+                    return Save(store, project, label, () =>
+                    {
+                        var arg = a.Positional[0];
+                        var ratio = arg.ToLowerInvariant() is "originale" or "original"
+                            ? editor.OriginalAspect() ?? throw new CliException("Nessun video da cui prendere il formato originale.")
+                            : Reframe.ParseRatio(arg);
+                        var (w, h, n) = editor.ApplyAspect(ratio, a.Flag("fill"));
+                        return $"formato {w}x{h}; {n} clip {(a.Flag("fill") ? "ritagliate per riempire" : "adattate (bande nere)")}";
+                    }, editor);
+                case "reframe":
+                    return Save(store, project, label, () =>
+                    {
+                        var id = a.Pos(0, "clipId");
+                        var all = !a.Flag("only");
+                        List<Clip> changed;
+                        if (a.Flag("fill") || a.Flag("fit")) changed = editor.ReframeFill(id, a.Flag("fill"), all);
+                        else
+                        {
+                            var f = (a.Opt("frame") ?? throw new CliException("Indica --fill, --fit o --frame fx,fy,fw.")).Split(',');
+                            if (f.Length != 3) throw new CliException("--frame vuole tre valori: fx,fy,fw.");
+                            var n = f.Select(v => Args.ParseTime(v, "frame")).ToArray();
+                            changed = editor.ReframeClip(id, n[0], n[1], n[2], all);
+                        }
+                        var c0 = changed[0];
+                        return $"{changed.Count} clip reinquadrate (scala {F(c0.Scale)}, centro {F(c0.X)},{F(c0.Y)})";
+                    }, editor);
                 case "subtitles" or "subs" or "sottotitoli":
                     if (a.Positional.FirstOrDefault() == "export")
                     {
