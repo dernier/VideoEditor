@@ -84,6 +84,7 @@ public sealed class ClaudeCliSession(string workingDirectory)
 
         using var reg = ct.Register(Cancel);
         var sawResult = false;
+        var authError = false;
         while (await process.StandardOutput.ReadLineAsync(CancellationToken.None) is { } line)
         {
             if (line.Length == 0) continue;
@@ -98,19 +99,36 @@ public sealed class ClaudeCliSession(string workingDirectory)
             foreach (var ev in Interpret(node))
             {
                 if (ev.Kind == "result") sawResult = true;
+                if (IsAuthError(ev.Text)) authError = true;
                 yield return ev;
             }
         }
         await process.WaitForExitAsync(CancellationToken.None);
+        string errText;
+        lock (stderr) errText = stderr.ToString().Trim();
         if (!sawResult)
         {
-            string err;
-            lock (stderr) err = stderr.ToString().Trim();
+            if (IsAuthError(errText)) authError = true;
             yield return new ClaudeEvent("error", ct.IsCancellationRequested
                 ? "Interrotto."
-                : $"Claude Code è terminato (codice {process.ExitCode}). {err}");
+                : $"Claude Code è terminato (codice {process.ExitCode}). {errText}");
         }
+        if (authError) yield return new ClaudeEvent("error", AuthHelp);
     }
+
+    /// <summary>Spiegazione mostrata quando il login di Claude Code è scaduto o assente.</summary>
+    public const string AuthHelp =
+        "Claude Code non è autenticato (login scaduto o assente). Per rinnovarlo: premi «Terminale» in alto, " +
+        "scrivi  claude  e poi  /login  e completa l'accesso nel browser; chiudi con /exit e riprova qui. " +
+        "In alternativa imposta la variabile d'ambiente ANTHROPIC_API_KEY con una chiave API.";
+
+    internal static bool IsAuthError(string? text) =>
+        !string.IsNullOrEmpty(text) &&
+        (text.Contains("authentication_error", StringComparison.OrdinalIgnoreCase) ||
+         text.Contains("Failed to authenticate", StringComparison.OrdinalIgnoreCase) ||
+         text.Contains("OAuth", StringComparison.OrdinalIgnoreCase) && text.Contains("expired", StringComparison.OrdinalIgnoreCase) ||
+         text.Contains("Invalid API key", StringComparison.OrdinalIgnoreCase) ||
+         text.Contains("/login", StringComparison.OrdinalIgnoreCase));
 
     private IEnumerable<ClaudeEvent> Interpret(JsonNode node)
     {

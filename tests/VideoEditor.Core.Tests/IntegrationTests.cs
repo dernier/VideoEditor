@@ -76,4 +76,30 @@ public class IntegrationTests
             Directory.Delete(dir, true);
         }
     }
+
+    [Fact]
+    public async Task ClaudeSession_ExplainsExpiredLogin()
+    {
+        if (OperatingSystem.IsWindows()) return;
+        var dir = Path.Combine(Path.GetTempPath(), "vedit-claude-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        try
+        {
+            var fake = Path.Combine(dir, "claude");
+            File.WriteAllText(fake, """
+                #!/bin/sh
+                cat > /dev/null
+                echo '{"type":"result","subtype":"success","is_error":true,"result":"Failed to authenticate. API Error: 401 {\"type\":\"error\",\"error\":{\"type\":\"authentication_error\",\"message\":\"OAuth access token has expired.\"}}"}'
+                """.Replace("\r", ""));
+            File.SetUnixFileMode(fake, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+            var events = new List<ClaudeEvent>();
+            await foreach (var ev in new ClaudeCliSession(dir) { ClaudePath = fake }.SendAsync("ciao")) events.Add(ev);
+            Assert.Equal("result", events[0].Kind);
+            Assert.Equal(ClaudeCliSession.AuthHelp, events[^1].Text);
+        }
+        finally
+        {
+            Directory.Delete(dir, true);
+        }
+    }
 }

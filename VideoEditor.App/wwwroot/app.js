@@ -52,7 +52,7 @@ onHost(msg => {
     case 'previewReady':
       S.preview = { url: msg.url, duration: msg.duration, from: msg.from || 0, stale: false };
       setMode('render');
-      toast('Anteprima pronta.', 'ok');
+      toast('Anteprima renderizzata pronta: ora il monitor mostra il video esattamente come verrà esportato (modalità Render). Torna a «Live» mentre monti.', 'ok');
       break;
     case 'frameReady': player.showFrame(msg.url, msg.time); break;
     case 'silences': showSilences(msg.ranges, msg.trackId); break;
