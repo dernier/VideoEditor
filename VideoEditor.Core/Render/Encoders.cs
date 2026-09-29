@@ -1,3 +1,6 @@
+using System;
+using System.Collections.Generic;
+
 namespace VideoEditor.Core.Render;
 
 /// <summary>Parametri degli encoder video. Con una GPU NVIDIA si usano gli encoder NVENC.</summary>

@@ -1,3 +1,6 @@
+using System;
+using System.IO;
+using System.Linq;
 using VideoEditor.Core.Editing;
 using VideoEditor.Core.Media;
 using VideoEditor.Core.Model;

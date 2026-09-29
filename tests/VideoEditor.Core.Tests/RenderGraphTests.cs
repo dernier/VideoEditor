@@ -1,3 +1,4 @@
+using System;
 using VideoEditor.Core.Editing;
 using VideoEditor.Core.Model;
 using VideoEditor.Core.Render;
