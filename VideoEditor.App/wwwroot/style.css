@@ -13,6 +13,7 @@
   --audio: #2f7a5a;
   --text-clip: #8a5a2f;
   --image: #6a4c93;
+  --mask: #7a2f4f;
   --sel: #ffd166;
   --head-w: 170px;
   --tl-h: 300px;
@@ -138,6 +139,23 @@ textarea { user-select: text; resize: vertical; }
 #layers { position: absolute; inset: 0; }
 #layers > * { position: absolute; }
 #layers video, #layers img { object-fit: fill; pointer-events: none; }
+#layers .maskLayer { pointer-events: none; overflow: hidden; }
+#layers .maskLayer.pixelate {
+  background-image: linear-gradient(90deg, #0002 1px, transparent 1px), linear-gradient(#0002 1px, transparent 1px);
+  background-size: var(--px) var(--px);
+}
+#maskEdit {
+  position: absolute; z-index: 50; border: 2px dashed #ffd166; cursor: move; box-shadow: 0 0 0 1px #000a;
+}
+#maskEdit.ellipse { border-radius: 50%; }
+#maskEdit .h { position: absolute; width: 12px; height: 12px; background: #ffd166; border: 1px solid #000; }
+#maskEdit .h.nw { left: -7px; top: -7px; cursor: nwse-resize; }
+#maskEdit .h.ne { right: -7px; top: -7px; cursor: nesw-resize; }
+#maskEdit .h.sw { left: -7px; bottom: -7px; cursor: nesw-resize; }
+#maskEdit .h.se { right: -7px; bottom: -7px; cursor: nwse-resize; }
+#maskEdit .tip {
+  position: absolute; left: 0; top: -22px; font-size: 11px; white-space: nowrap; background: #000c; color: #ffd166; padding: 1px 5px; border-radius: 3px;
+}
 #layers .placeholder {
   display: flex; align-items: center; justify-content: center; color: #aaa; background: #222 repeating-linear-gradient(45deg, #222 0 10px, #292929 10px 20px);
   font-size: 13px;
@@ -235,6 +253,12 @@ textarea { user-select: text; resize: vertical; }
 .clip.image { background-color: var(--image); }
 .clip.audio { background-color: var(--audio); }
 .clip.text { background-color: var(--text-clip); }
+.clip.mask { background: repeating-linear-gradient(45deg, var(--mask) 0 8px, #8d3a5d 8px 16px); }
+.clip .kf {
+  position: absolute; bottom: 3px; width: 9px; height: 9px; margin-left: -5px; background: #ffd166;
+  transform: rotate(45deg); border: 1px solid #000; z-index: 1; pointer-events: none;
+}
+.trow.kind-mask .lane { background: #1d171a; }
 .clip.sel { outline: 2px solid var(--sel); outline-offset: -1px; z-index: 2; }
 .clip .lbl {
   position: absolute; left: 4px; top: 1px; right: 4px; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;

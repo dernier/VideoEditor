@@ -3,8 +3,10 @@
 
 import { S, op, assetOf, clipEnd, fmt, esc, sendWithFiles } from './state.js';
 
-const ROW_H = { video: 58, audio: 46, text: 44 };
+const ROW_H = { video: 58, audio: 46, text: 44, mask: 44 };
+const MASK_LANE = 22;
 const EDGE = 7;
+const MASK_LABEL = { blur: 'Sfocatura', pixelate: 'Pixel', solid: 'Riquadro' };
 
 export class Timeline {
   constructor({ onSeek, onSelectionChange }) {
@@ -84,14 +86,17 @@ export class Timeline {
     for (const track of p.tracks) {
       const row = document.createElement('div');
       row.className = `trow kind-${track.kind}` + (track.hidden || track.muted ? ' dim' : '');
-      row.style.height = ROW_H[track.kind] + 'px';
+      // Le maschere possono sovrapporsi (più volti insieme): si dispongono su sotto-righe.
+      const lanes = track.kind === 'mask' ? assignLanes(track.clips) : null;
+      const laneCount = lanes ? Math.max(1, ...lanes.values()) : 1;
+      row.style.height = (lanes && laneCount > 1 ? Math.max(ROW_H.mask, laneCount * MASK_LANE + 6) : ROW_H[track.kind]) + 'px';
       row.dataset.track = track.id;
       row.innerHTML = `
         <div class="thead">
           <div class="tname" title="Doppio clic per rinominare">${esc(track.name)} <small>${track.id}</small></div>
           <div class="tbtns">
             ${track.kind !== 'audio' ? `<button data-t="hidden" class="${track.hidden ? 'on' : ''}" title="Nascondi">👁</button>` : ''}
-            ${track.kind !== 'text' ? `<button data-t="muted" class="${track.muted ? 'on' : ''}" title="Muto">M</button>` : ''}
+            ${track.kind !== 'text' && track.kind !== 'mask' ? `<button data-t="muted" class="${track.muted ? 'on' : ''}" title="Muto">M</button>` : ''}
             <button data-t="locked" class="${track.locked ? 'on' : ''}" title="Blocca (esclusa dai tagli)">🔒</button>
             ${track.kind === 'audio' ? `<button data-t="duck" class="${track.duck ? 'on' : ''}" title="Ducking: si abbassa quando si parla">D</button>` : ''}
             <button data-t="up" title="Sposta su">▲</button>
@@ -100,7 +105,15 @@ export class Timeline {
         </div>
         <div class="lane"></div>`;
       const lane = row.querySelector('.lane');
-      for (const clip of track.clips) lane.appendChild(this._clipEl(clip, track));
+      for (const clip of track.clips) {
+        const el = this._clipEl(clip, track);
+        if (lanes && laneCount > 1) {
+          el.style.top = 3 + (lanes.get(clip.id) - 1) * MASK_LANE + 'px';
+          el.style.bottom = 'auto';
+          el.style.height = MASK_LANE - 2 + 'px';
+        }
+        lane.appendChild(el);
+      }
       row.querySelector('.tbtns').addEventListener('click', e => this._trackButton(e, track));
       row.querySelector('.tname').addEventListener('dblclick', () => {
         const name = prompt('Nome della traccia', track.name);
@@ -117,19 +130,24 @@ export class Timeline {
 
   _clipEl(clip, track) {
     const asset = clip.assetId ? assetOf(clip.assetId) : null;
-    const kind = clip.text != null ? 'text' : asset?.kind === 'image' ? 'image' : track.kind === 'audio' ? 'audio' : 'video';
+    const kind = clip.mask ? 'mask' : clip.text != null ? 'text' : asset?.kind === 'image' ? 'image' : track.kind === 'audio' ? 'audio' : 'video';
     const el = document.createElement('div');
     el.className = `clip ${kind}` + (S.selection.has(clip.id) ? ' sel' : '');
     el.dataset.clip = clip.id;
     el.style.left = clip.start * this.zoom + 'px';
     el.style.width = Math.max(2, clip.duration * this.zoom) + 'px';
-    const label = clip.text != null ? clip.text.replace(/\n/g, ' ') : asset ? asset.name : '?';
+    const label = clip.mask ? `${MASK_LABEL[clip.mask.effect] || 'Maschera'}${clip.mask.keyframes?.length ? ` · ${clip.mask.keyframes.length} keyframe` : ''}`
+      : clip.text != null ? clip.text.replace(/\n/g, ' ') : asset ? asset.name : '?';
     el.title = `${clip.id} · ${label}\n${fmt(clip.start)} → ${fmt(clipEnd(clip))} (${clip.duration.toFixed(2)} s)` + (clip.note ? `\n${clip.note}` : '');
     const thumb = asset && S.media[asset.id]?.thumb;
     if (thumb && (kind === 'video' || kind === 'image')) el.style.backgroundImage = `url("${thumb}")`;
     el.innerHTML = `<div class="lbl">${esc(label)}</div><div class="edge l"></div><div class="edge r"></div>`;
     if (clip.fadeIn > 0) el.insertAdjacentHTML('beforeend', `<div class="fade in" style="width:${clip.fadeIn * this.zoom}px"></div>`);
     if (clip.fadeOut > 0) el.insertAdjacentHTML('beforeend', `<div class="fade out" style="width:${clip.fadeOut * this.zoom}px"></div>`);
+    for (const k of clip.mask?.keyframes || []) {
+      const x = (k.t - clip.in) * this.zoom;
+      if (x >= -1 && x <= clip.duration * this.zoom + 1) el.insertAdjacentHTML('beforeend', `<div class="kf" style="left:${x}px" title="keyframe ${fmt(clip.start + k.t - clip.in)}"></div>`);
+    }
     if (asset?.hasAudio) {
       const cv = document.createElement('canvas');
       cv.className = 'wave';
@@ -409,9 +427,10 @@ export class Timeline {
     }
     const lane = e.target.closest('.lane');
     const row = e.target.closest('.trow');
-    if (lane && row && S.project.tracks.find(t => t.id === row.dataset.track)?.kind === 'text') {
-      op({ op: 'addText', trackId: row.dataset.track, start: Math.round(this.timeAt(e.clientX) * 100) / 100, text: 'Testo' });
-    }
+    const kind = row && S.project.tracks.find(t => t.id === row.dataset.track)?.kind;
+    const start = Math.round(this.timeAt(e.clientX) * 100) / 100;
+    if (lane && kind === 'text') op({ op: 'addText', trackId: row.dataset.track, start, text: 'Testo' });
+    if (lane && kind === 'mask') op({ op: 'addMask', trackId: row.dataset.track, start, duration: 3 });
   }
 
   _dragOver(e) {
@@ -448,8 +467,23 @@ function findClipLocal(id) {
   return null;
 }
 
+/** Assegna a ogni clip la prima sotto-riga libera (1, 2, ...) in cui non si sovrappone ad altre. */
+function assignLanes(clips) {
+  const ends = [];
+  const result = new Map();
+  for (const c of [...clips].sort((a, b) => a.start - b.start)) {
+    let i = ends.findIndex(e => e <= c.start + 1e-6);
+    if (i < 0) { ends.push(0); i = ends.length - 1; }
+    ends[i] = clipEnd(c);
+    result.set(c.id, i + 1);
+  }
+  return result;
+}
+
 function compatible(track, clip) {
+  if (clip.mask) return track.kind === 'mask';
   if (clip.text != null) return track.kind === 'text';
+  if (track.kind === 'mask') return false;
   const a = assetOf(clip.assetId);
   if (track.kind === 'video') return a?.kind !== 'audio';
   if (track.kind === 'audio') return !!a?.hasAudio;

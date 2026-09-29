@@ -1,6 +1,6 @@
 // Interfaccia dell'editor: collega timeline, anteprima, pannelli e chat all'host WPF.
 
-import { S, send, op, onHost, sendWithFiles, assetOf, clipEnd, findClip, fps, fmt, esc } from './state.js';
+import { S, send, op, onHost, sendWithFiles, assetOf, clipEnd, findClip, fps, fmt, esc, maskRectAt } from './state.js';
 import { Timeline } from './timeline.js';
 import { Player } from './player.js';
 
@@ -75,6 +75,7 @@ function onProject(msg) {
   S.canUndo = msg.canUndo;
   S.canRedo = msg.canRedo;
   S.media = msg.media || {};
+  S.maskDrag = null;
   if (first) { S.selection.clear(); S.inPoint = S.outPoint = null; S.preview = null; S.peaks = {}; }
   for (const id of [...S.selection]) if (!findClip(id)) S.selection.delete(id);
   if (S.preview) S.preview.stale = true;
@@ -110,6 +111,7 @@ function onTimeUpdate(t, playing) {
     if (playing) timeline.follow();
     highlightWord(t);
   }
+  updateMaskEditor(t, playing);
   $('#btnPlay').textContent = playing ? '❚❚' : '▶';
   reportState(false);
 }
@@ -157,6 +159,8 @@ const commands = {
   },
   addText: () => op({ op: 'addText', start: player.t, duration: 3, text: 'Testo' }),
   addMarker: () => op({ op: 'addMarker', time: player.t, label: '' }),
+  addMask: () => op({ op: 'addMask', start: player.t, duration: 3 }),
+  addTrackMask: () => op({ op: 'addTrack', kind: 'mask' }),
   renderPreview: () => send('render', { preview: true }),
   frame: () => { player.pause(); send('frame', { time: player.t }); },
   export: () => send('render', { preview: false }),
@@ -234,6 +238,7 @@ document.addEventListener('keydown', e => {
     'x': () => commands.cutInOut(),
     'm': () => commands.addMarker(),
     't': () => commands.addText(),
+    'b': () => commands.addMask(),
     '+': () => timeline.setZoom(timeline.zoom * 1.3, true),
     '-': () => timeline.setZoom(timeline.zoom / 1.3, true),
     'Escape': () => { S.selection.clear(); timeline.updateSelection(); renderInspector(); setInOut(null, null); },
@@ -485,6 +490,7 @@ function renderInspector() {
   const f = findClip(ids[0]);
   if (!f) { box.innerHTML = ''; return; }
   const c = f.clip;
+  if (c.mask) { renderMaskInspector(box, c); return; }
   const asset = c.assetId ? assetOf(c.assetId) : null;
   const isText = c.text != null;
   const visual = f.track.kind !== 'audio';
@@ -529,6 +535,117 @@ function renderInspector() {
   box.querySelector('[data-x="seek"]').onclick = () => seek(c.start);
   box.querySelector('[data-x="inout"]').onclick = () => setInOut(c.start, clipEnd(c));
 }
+
+function renderMaskInspector(box, c) {
+  const m = c.mask;
+  const keys = [...(m.keyframes || [])].sort((a, b) => a.t - b.t);
+  const opt = (v, cur, label) => `<option value="${v}" ${v === cur ? 'selected' : ''}>${label}</option>`;
+  box.innerHTML = `
+    <h3>Maschera di oscuramento <span class="muted small">${c.id}</span></h3>
+    <p class="note">Trascina la zona sul monitor (a video fermo) per spostarla, gli angoli per ridimensionarla.
+      Per seguire un volto che si muove: vai in un altro istante, sposta la zona e verrà creato un keyframe.</p>
+    ${field('Inizio', num('start', c.start))}
+    ${field('Durata', num('duration', c.duration))}
+    ${field('Effetto', `<select data-m="effect">${opt('blur', m.effect, 'Sfocatura')}${opt('pixelate', m.effect, 'Pixel (mosaico)')}${opt('solid', m.effect, 'Riquadro pieno')}</select>`)}
+    ${field('Forma', `<select data-m="shape">${opt('ellipse', m.shape, 'Ellisse')}${opt('rect', m.shape, 'Rettangolo')}</select>`)}
+    ${m.effect !== 'solid' ? field('Intensità', `<input type="range" data-m="strength" min="4" max="150" step="1" value="${m.strength}" title="${m.strength}">`) : ''}
+    ${m.effect === 'solid' ? field('Colore', colorInput('color', m.color || '#000000', 'm')) : ''}
+    <h3>Keyframe (${keys.length})</h3>
+    <div class="row"><button data-x="key">◆ Keyframe qui</button><button data-x="unkey">Rimuovi qui</button></div>
+    ${keys.map(k => `<div class="row small"><button data-go="${c.start + k.t - c.in}">${fmt(c.start + k.t - c.in)}</button>
+      <span class="muted">x ${k.x.toFixed(2)} y ${k.y.toFixed(2)} · ${k.w.toFixed(2)}×${k.h.toFixed(2)}</span></div>`).join('')}
+    ${field('Nota', `<input data-k="note" value="${esc(c.note || '')}">`)}`;
+  box.querySelectorAll('[data-k]').forEach(inp => inp.addEventListener('change', () => {
+    let v = inp.value;
+    if (inp.type === 'number') v = +v;
+    if (inp.dataset.k === 'note' && !v) v = null;
+    op({ op: 'setClip', clipId: c.id, patch: { [inp.dataset.k]: v } });
+  }));
+  box.querySelectorAll('[data-m]').forEach(inp => inp.addEventListener('change', () => {
+    let v = inp.value;
+    if (inp.type === 'range') v = +v;
+    op({ op: 'setClip', clipId: c.id, patch: { mask: { [inp.dataset.m]: v } } });
+  }));
+  box.querySelectorAll('input[type=color]').forEach(inp => {
+    inp.addEventListener('input', () => { inp.previousElementSibling.value = inp.value.toUpperCase(); });
+    inp.addEventListener('change', () => inp.previousElementSibling.dispatchEvent(new Event('change')));
+  });
+  box.querySelector('[data-x="key"]').onclick = () => {
+    const t = Math.min(Math.max(player.t, c.start), clipEnd(c));
+    const r = maskRectAt(c, t);
+    op({ op: 'maskRect', clipId: c.id, time: t, ...r, keyframe: true });
+  };
+  box.querySelector('[data-x="unkey"]').onclick = () => op({ op: 'maskUnkey', clipId: c.id, time: player.t });
+  box.querySelectorAll('[data-go]').forEach(b => b.onclick = () => { player.pause(); seek(+b.dataset.go); });
+}
+
+// ================= Modifica delle maschere sul monitor =================
+
+const maskEdit = $('#maskEdit');
+let maskDragState = null;
+
+function selectedMaskAt(t) {
+  if (S.selection.size !== 1) return null;
+  const f = findClip([...S.selection][0]);
+  if (!f?.clip.mask || f.track.locked || f.track.hidden) return null;
+  return t >= f.clip.start && t < clipEnd(f.clip) ? f.clip : null;
+}
+
+function updateMaskEditor(t, playing) {
+  const clip = !playing && player.mode === 'live' ? selectedMaskAt(t) : null;
+  maskEdit.classList.toggle('hidden', !clip);
+  if (!clip || !S.project) return;
+  const r = S.maskDrag?.id === clip.id ? S.maskDrag.rect : maskRectAt(clip, t);
+  const k = player.k || 1, W = S.project.settings.width * k, H = S.project.settings.height * k;
+  maskEdit.style.left = (r.x - r.w / 2) * W + 'px';
+  maskEdit.style.top = (r.y - r.h / 2) * H + 'px';
+  maskEdit.style.width = r.w * W + 'px';
+  maskEdit.style.height = r.h * H + 'px';
+  maskEdit.classList.toggle('ellipse', clip.mask.shape === 'ellipse');
+  const n = clip.mask.keyframes?.length || 0;
+  maskEdit.querySelector('.tip').textContent = n ? `${n} keyframe · spostando ne crei uno qui` : 'Trascina · angoli per ridimensionare';
+}
+
+maskEdit.addEventListener('pointerdown', e => {
+  const clip = selectedMaskAt(player.t);
+  if (!clip) return;
+  e.preventDefault();
+  e.stopPropagation();
+  maskEdit.setPointerCapture(e.pointerId);
+  const handle = e.target.classList.contains('h') ? [...e.target.classList].find(c => c.length === 2) : null;
+  maskDragState = { id: clip.id, handle, x0: e.clientX, y0: e.clientY, r0: maskRectAt(clip, player.t), time: player.t };
+});
+
+maskEdit.addEventListener('pointermove', e => {
+  const d = maskDragState;
+  if (!d) return;
+  const k = player.k || 1;
+  const dx = (e.clientX - d.x0) / (S.project.settings.width * k);
+  const dy = (e.clientY - d.y0) / (S.project.settings.height * k);
+  let { x, y, w, h } = d.r0;
+  if (!d.handle) {
+    x += dx; y += dy;
+  } else {
+    // Ridimensiona tenendo fermo l'angolo opposto.
+    let l = x - w / 2, r = x + w / 2, t = y - h / 2, b = y + h / 2;
+    if (d.handle.includes('w')) l += dx; else r += dx;
+    if (d.handle.includes('n')) t += dy; else b += dy;
+    if (r - l < 0.01) r = l + 0.01;
+    if (b - t < 0.01) b = t + 0.01;
+    x = (l + r) / 2; y = (t + b) / 2; w = r - l; h = b - t;
+  }
+  S.maskDrag = { id: d.id, rect: { x, y, w, h } };
+  updateMaskEditor(player.t, false);
+});
+
+maskEdit.addEventListener('pointerup', () => {
+  const d = maskDragState;
+  maskDragState = null;
+  if (!d || !S.maskDrag) return;
+  const r = S.maskDrag.rect;
+  const q = v => Math.round(v * 10000) / 10000;
+  op({ op: 'maskRect', clipId: d.id, time: d.time, x: q(r.x), y: q(r.y), w: q(r.w), h: q(r.h) });
+});
 
 const field = (label, input) => `<div class="field"><label>${label}</label>${input}</div>`;
 const num = (k, v) => `<input type="number" data-k="${k}" value="${+(+v).toFixed(3)}" step="0.01" min="0">`;

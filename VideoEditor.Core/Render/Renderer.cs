@@ -88,12 +88,12 @@ public static class Renderer
 
     /// <summary>Esporta il fotogramma composto all'istante <paramref name="time"/> in un'immagine PNG/JPEG.</summary>
     public static async Task<string> RenderFrameAsync(ProjectStore store, Project project, double time, string output,
-        int? height = null, CancellationToken ct = default)
+        int? height = null, CancellationToken ct = default, bool grid = false)
     {
         var fps = project.Settings.Fps > 0 ? project.Settings.Fps : 30;
         var duration = project.GetDuration();
         time = Math.Clamp(time, 0, Math.Max(0, duration - 1 / fps));
-        var request = new RenderRequest { From = time, To = time + 1 / fps, Height = height, Audio = false };
+        var request = new RenderRequest { From = time, To = time + 1 / fps, Height = height, Audio = false, Grid = grid };
         var workDir = CreateWorkDir(store);
         try
         {

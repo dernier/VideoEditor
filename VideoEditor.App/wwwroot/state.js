@@ -57,3 +57,20 @@ export function fmt(t) {
 export function esc(s) {
   return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
+
+/** Zona della maschera (coordinate 0-1) all'istante t della timeline, interpolando i keyframe. */
+export function maskRectAt(clip, t) {
+  const m = clip.mask;
+  const mt = clip.in + (t - clip.start);
+  const keys = [...(m.keyframes || [])].sort((a, b) => a.t - b.t);
+  if (!keys.length) return { x: m.x, y: m.y, w: m.w, h: m.h };
+  if (mt <= keys[0].t) return { ...keys[0] };
+  if (mt >= keys[keys.length - 1].t) return { ...keys[keys.length - 1] };
+  for (let i = 0; i < keys.length - 1; i++) {
+    const a = keys[i], b = keys[i + 1];
+    if (mt > b.t) continue;
+    const f = b.t - a.t < 1e-9 ? 0 : (mt - a.t) / (b.t - a.t);
+    return { x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f, w: a.w + (b.w - a.w) * f, h: a.h + (b.h - a.h) * f };
+  }
+  return { ...keys[keys.length - 1] };
+}

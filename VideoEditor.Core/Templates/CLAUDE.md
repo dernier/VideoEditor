@@ -17,9 +17,9 @@ Rispondi sempre in italiano.
 
 ## Struttura della timeline
 
-- Tracce dall'alto in basso (`vedit info`). Tra le tracce visive (video e testo) quelle **più in alto
-  sono in primo piano**. Predefinite: `T1` Testi, `V2` Overlay, `V1` Video principale,
-  `A1` Musica (ducking: si abbassa quando si parla), `A2` Effetti sonori.
+- Tracce dall'alto in basso (`vedit info`). Tra le tracce visive (video, testo, maschere) quelle **più in alto
+  sono in primo piano**. Predefinite: `T1` Testi, `M1` Maschere (oscuramento), `V2` Overlay, `V1` Video
+  principale, `A1` Musica (ducking: si abbassa quando si parla), `A2` Effetti sonori.
 - L'audio dei video sta nella stessa clip video (V1): non serve una traccia audio separata.
 - Clip: `start` (timeline), `in` (punto nel file sorgente), `duration`, `volume`, `fadeIn`, `fadeOut`,
   `x`/`y` (centro, 0-1), `scale` (1 = a tutto schermo; 0.3 = riquadro piccolo), `opacity`.
@@ -44,6 +44,23 @@ Rispondi sempre in italiano.
 7. Controlla: `vedit validate`, un fotogramma con `vedit frame <T>` (puoi leggere il PNG per vederlo),
    un'anteprima con `vedit render --preview` (file in `output/anteprima.mp4`).
 
+## Oscurare volti, nomi, email, targhe
+
+Le maschere sulla traccia `M1` sfocano (`blur`), pixelano (`pixelate`) o coprono (`solid`) una zona di
+**tutto ciò che sta sotto** nella pila: i testi di `T1`, che sono sopra, restano nitidi.
+
+- Coordinate normalizzate 0-1 sul fotogramma: `x,y` = **centro** della zona, `w,h` = larghezza e altezza.
+- Per trovare le coordinate guarda il fotogramma: `vedit frame <T> --grid --out f.png` e leggi il PNG;
+  la griglia ha linee ogni 0.1. Abbonda un po' con la zona (meglio coprire di più che lasciare scoperto).
+- Zona fissa: `vedit mask add --at 12 --dur 4 --rect 0.62,0.30,0.18,0.28` (di default ellisse sfocata;
+  `--shape rect`, `--effect pixelate|solid`, `--strength 40` per sfocare di più).
+- Zona che si muove (volto che cammina): aggiungi keyframe negli istanti chiave, la zona si sposta in linea
+  retta tra uno e l'altro: `vedit mask key c15 12.0 0.62,0.30,0.18,0.28`, `vedit mask key c15 14.5 0.40,0.32,0.18,0.28`.
+  Controlla i fotogrammi intermedi con `vedit frame` e aggiungi keyframe dove la zona "scappa".
+- Più volti nello stesso momento: una maschera per volto (possono sovrapporsi nel tempo).
+- Testo sensibile detto a voce (nomi, email): trovalo con `vedit find`, poi silenzialo dividendo la clip
+  (`vedit split`) e mettendo `volume=0` al pezzo, oppure chiedi all'utente come preferisce.
+
 ## Altre operazioni
 
 - Titoli e sottotitoli: `vedit text "Titolo" --at 0 --dur 3 --y 0.5 --size 96 --fade 0.3`.
@@ -60,3 +77,7 @@ Rispondi sempre in italiano.
 ## Comandi
 
 Elenco completo: `vedit help`.
+
+## Note del progetto
+
+<!-- Scrivi qui sotto le tue note per Claude: questa sezione viene conservata quando l'editor aggiorna il file. -->

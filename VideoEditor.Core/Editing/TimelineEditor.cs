@@ -39,7 +39,7 @@ public sealed class TimelineEditor(Project project)
 
     public Track AddTrack(TrackKind kind, string? name = null, int? index = null)
     {
-        var prefix = kind switch { TrackKind.Video => "V", TrackKind.Audio => "A", _ => "T" };
+        var prefix = kind switch { TrackKind.Video => "V", TrackKind.Audio => "A", TrackKind.Mask => "M", _ => "T" };
         var track = new Track
         {
             Id = NextId(prefix, Project.Tracks.Select(t => t.Id)),
@@ -94,6 +94,7 @@ public sealed class TimelineEditor(Project project)
         EnsureUnlocked(track);
         var asset = Project.FindAsset(assetId) ?? throw new EditException($"Asset {assetId} non trovato.");
         if (track.Kind == TrackKind.Text) throw new EditException("Sulle tracce di testo si aggiungono solo testi (vedit text add).");
+        if (track.Kind == TrackKind.Mask) throw new EditException("Sulle tracce maschere si aggiungono solo maschere (vedit mask add).");
         if (track.Kind == TrackKind.Audio && !asset.HasAudio) throw new EditException($"L'asset {assetId} non ha audio.");
         if (track.Kind == TrackKind.Video && asset.Kind == AssetKind.Audio) throw new EditException("Un file audio va su una traccia audio.");
 
@@ -149,8 +150,9 @@ public sealed class TimelineEditor(Project project)
             var allowed = target.Kind switch
             {
                 TrackKind.Text => clip.IsText,
-                TrackKind.Video => !clip.IsText && asset?.Kind != AssetKind.Audio,
-                _ => !clip.IsText && asset?.HasAudio == true,
+                TrackKind.Mask => clip.IsMask,
+                TrackKind.Video => !clip.IsText && !clip.IsMask && asset?.Kind != AssetKind.Audio,
+                _ => !clip.IsText && !clip.IsMask && asset?.HasAudio == true,
             };
             if (!allowed) throw new EditException($"Non si può spostare la clip {clipId} su una traccia di tipo {target.Kind}.");
             track.Clips.Remove(clip);
@@ -180,7 +182,7 @@ public sealed class TimelineEditor(Project project)
         {
             var delta = s - clip.Start;
             var newIn = clip.In + delta;
-            if (!isStill && newIn < 0) { delta -= newIn; newIn = 0; }
+            if (!isStill && !clip.IsMask && newIn < 0) { delta -= newIn; newIn = 0; }
             if (clip.Start + delta < 0) { var fix = -(clip.Start + delta); delta += fix; newIn += fix; }
             if (clip.Duration - delta < MinDuration) throw new EditException("La clip diventerebbe troppo corta.");
             clip.Start += delta;
@@ -210,7 +212,7 @@ public sealed class TimelineEditor(Project project)
         if (u.Duration < MinDuration) throw new EditException("Durata troppo breve.");
         clip.AssetId = u.AssetId;
         clip.Start = Math.Max(0, u.Start);
-        clip.In = Math.Max(0, u.In);
+        clip.In = u.Mask is not null ? u.In : Math.Max(0, u.In);
         clip.Duration = u.Duration;
         clip.Volume = Math.Max(0, u.Volume);
         clip.FadeIn = Math.Clamp(u.FadeIn, 0, clip.Duration);
@@ -222,6 +224,9 @@ public sealed class TimelineEditor(Project project)
         clip.Text = u.Text;
         clip.Style = u.Style;
         clip.Note = u.Note;
+        if (u.Mask is not null && !clip.IsMask && track.Kind != TrackKind.Mask)
+            throw new EditException("Le maschere stanno solo sulle tracce Maschere.");
+        clip.Mask = u.Mask is null ? null : Sanitize(u.Mask);
         Sort(track);
         return clip;
     }
@@ -376,6 +381,101 @@ public sealed class TimelineEditor(Project project)
         if (Project.Markers.RemoveAll(m => m.Id == id) == 0) throw new EditException($"Marcatore {id} non trovato.");
     }
 
+    // ---------- Maschere di oscuramento ----------
+
+    /// <summary>
+    /// Aggiunge una maschera. Senza traccia usa la prima traccia Maschere, creandola se serve
+    /// subito sopra le tracce video (così i testi restano nitidi).
+    /// </summary>
+    public Clip AddMask(string? trackId, double start, double duration, MaskSpec? spec = null)
+    {
+        Track track;
+        if (trackId is not null)
+        {
+            track = GetTrack(trackId);
+            if (track.Kind != TrackKind.Mask) throw new EditException($"La traccia {track.Id} non è una traccia Maschere.");
+        }
+        else
+        {
+            track = Project.Tracks.FirstOrDefault(t => t.Kind == TrackKind.Mask && !t.Locked)
+                    ?? AddTrack(TrackKind.Mask, "Maschere", Math.Max(0, Project.Tracks.FindIndex(t => t.Kind == TrackKind.Video)));
+        }
+        EnsureUnlocked(track);
+        if (duration < MinDuration) throw new EditException("Durata della maschera troppo breve.");
+        var clip = new Clip
+        {
+            Id = NextClipId(),
+            Start = Math.Max(0, start),
+            Duration = duration,
+            Mask = Sanitize(spec ?? new MaskSpec()),
+        };
+        Insert(track, clip);
+        return clip;
+    }
+
+    /// <summary>
+    /// Imposta la zona di una maschera all'istante <paramref name="time"/> della timeline.
+    /// Se la maschera ha già keyframe (o <paramref name="asKeyframe"/>) crea/aggiorna il keyframe
+    /// in quell'istante; altrimenti cambia la zona fissa.
+    /// </summary>
+    public Clip SetMaskRect(string clipId, double time, double x, double y, double w, double h, bool asKeyframe = false)
+    {
+        var (track, clip) = GetClip(clipId);
+        EnsureUnlocked(track);
+        var m = clip.Mask ?? throw new EditException($"La clip {clipId} non è una maschera.");
+        (x, y, w, h) = ClampRect(x, y, w, h);
+        if (asKeyframe || m.Keyframes.Count > 0)
+        {
+            var mt = Math.Round(clip.In + (time - clip.Start), 4);
+            // Primo keyframe: fissa anche la posizione di partenza all'inizio della clip, se diversa.
+            if (m.Keyframes.Count == 0 && Math.Abs(mt - clip.In) > 0.05)
+                m.Keyframes.Add(new MaskKey { T = clip.In, X = m.X, Y = m.Y, W = m.W, H = m.H });
+            m.Keyframes.RemoveAll(k => Math.Abs(k.T - mt) < 0.02);
+            m.Keyframes.Add(new MaskKey { T = mt, X = x, Y = y, W = w, H = h });
+            m.Keyframes.Sort((a, b) => a.T.CompareTo(b.T));
+        }
+        else
+        {
+            (m.X, m.Y, m.W, m.H) = (x, y, w, h);
+        }
+        return clip;
+    }
+
+    /// <summary>Toglie il keyframe più vicino all'istante indicato (entro 0,1 s).</summary>
+    public Clip RemoveMaskKey(string clipId, double time)
+    {
+        var (track, clip) = GetClip(clipId);
+        EnsureUnlocked(track);
+        var m = clip.Mask ?? throw new EditException($"La clip {clipId} non è una maschera.");
+        var mt = clip.In + (time - clip.Start);
+        var nearest = m.Keyframes.OrderBy(k => Math.Abs(k.T - mt)).FirstOrDefault();
+        if (nearest is null || Math.Abs(nearest.T - mt) > 0.1) throw new EditException("Nessun keyframe in questo punto.");
+        m.Keyframes.Remove(nearest);
+        if (m.Keyframes.Count == 1)
+        {
+            // Con un solo keyframe la maschera torna fissa in quella posizione.
+            var k = m.Keyframes[0];
+            (m.X, m.Y, m.W, m.H) = (k.X, k.Y, k.W, k.H);
+            m.Keyframes.Clear();
+        }
+        return clip;
+    }
+
+    private static MaskSpec Sanitize(MaskSpec m)
+    {
+        (m.X, m.Y, m.W, m.H) = ClampRect(m.X, m.Y, m.W, m.H);
+        m.Strength = Math.Clamp(m.Strength, 1, 500);
+        m.Keyframes = m.Keyframes.Select(k =>
+        {
+            var (x, y, w, h) = ClampRect(k.X, k.Y, k.W, k.H);
+            return new MaskKey { T = k.T, X = x, Y = y, W = w, H = h };
+        }).OrderBy(k => k.T).ToList();
+        return m;
+    }
+
+    private static (double X, double Y, double W, double H) ClampRect(double x, double y, double w, double h) =>
+        (Math.Clamp(x, -0.5, 1.5), Math.Clamp(y, -0.5, 1.5), Math.Clamp(w, 0.005, 2), Math.Clamp(h, 0.005, 2));
+
     // ---------- Validazione ----------
 
     /// <summary>Controlla il progetto e restituisce errori e avvisi leggibili.</summary>
@@ -393,14 +493,15 @@ public sealed class TimelineEditor(Project project)
                 if (c.Start < 0) issues.Add($"ERRORE: clip {c.Id} inizia prima di zero.");
                 if (t.Kind == TrackKind.Text && !c.IsText) issues.Add($"ERRORE: la traccia di testo {t.Id} contiene la clip non testuale {c.Id}.");
                 if (t.Kind != TrackKind.Text && c.IsText) issues.Add($"ERRORE: testo {c.Id} su traccia non di testo {t.Id}.");
-                if (!c.IsText)
+                if (t.Kind == TrackKind.Mask != c.IsMask) issues.Add($"ERRORE: la clip {c.Id} e la traccia {t.Id} non sono compatibili (maschere solo su tracce Maschere).");
+                if (!c.IsText && !c.IsMask)
                 {
                     var a = c.AssetId is null ? null : Project.FindAsset(c.AssetId);
                     if (a is null) issues.Add($"ERRORE: clip {c.Id} senza asset valido ({c.AssetId}).");
                     else if (a.Kind != AssetKind.Image && c.In + c.Duration > a.Duration + 0.05)
                         issues.Add($"AVVISO: clip {c.Id} supera la fine del file sorgente ({c.In + c.Duration:0.###} > {a.Duration:0.###}).");
                 }
-                if (prev is not null && c.Start < prev.End - 1e-3)
+                if (prev is not null && c.Start < prev.End - 1e-3 && t.Kind != TrackKind.Mask)
                     issues.Add($"AVVISO: sulla traccia {t.Id} le clip {prev.Id} e {c.Id} si sovrappongono ({c.Start:0.###} < {prev.End:0.###}).");
                 prev = c;
             }

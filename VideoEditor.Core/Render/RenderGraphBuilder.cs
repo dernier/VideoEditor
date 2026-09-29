@@ -18,6 +18,9 @@ public sealed class RenderRequest
 
     public bool Video { get; init; } = true;
     public bool Audio { get; init; } = true;
+
+    /// <summary>Sovrappone una griglia al 10% (aiuta a stimare le coordinate nei fotogrammi esportati).</summary>
+    public bool Grid { get; init; }
 }
 
 /// <summary>Risultato della costruzione: argomenti di input, filtergraph e file di testo di appoggio.</summary>
@@ -102,10 +105,13 @@ public sealed class RenderGraphBuilder(Project project, Func<string, string> res
                 foreach (var g in groupsByTrack[track.Id])
                 {
                     if (track.Kind == TrackKind.Text) cur = AddText(cur, g.Pieces[0], width, height);
+                    else if (track.Kind == TrackKind.Mask) cur = AddMask(cur, g.Pieces[0], width, height);
                     else if (g.Pieces[0].Asset is { HasVideo: true }) cur = AddVideoLayer(cur, g, width, height);
                 }
             }
-            _statements.Add($"[{cur}]format=yuv420p[vout]");
+            _statements.Add(request.Grid
+                ? $"[{cur}]drawgrid=w=iw/10:h=ih/10:t=2:c=white@0.7,format=yuv420p[vout]"
+                : $"[{cur}]format=yuv420p[vout]");
             _graph.VideoLabel = "vout";
         }
 
@@ -142,8 +148,8 @@ public sealed class RenderGraphBuilder(Project project, Func<string, string> res
             var ve = Math.Min(c.End, to);
             if (ve - vs < Eps) continue;
             var asset = c.AssetId is null ? null : project.FindAsset(c.AssetId);
-            if (!c.IsText && asset is null) continue;
-            var isStill = c.IsText || asset!.Kind == AssetKind.Image;
+            if (!c.IsText && !c.IsMask && asset is null) continue;
+            var isStill = c.IsText || asset?.Kind == AssetKind.Image;
             pieces.Add(new Piece(c, asset, vs - from, isStill ? 0 : c.In + (vs - c.Start), ve - vs));
         }
 
@@ -292,6 +298,82 @@ public sealed class RenderGraphBuilder(Project project, Func<string, string> res
         _statements.Add($"[{cur}]{string.Join(",", filters)}[{output}]");
         return output;
     }
+
+    /// <summary>
+    /// Maschera di oscuramento: per ogni tratto tra due keyframe si ritaglia la zona (che si sposta
+    /// linearmente nel tempo), la si sfoca/pixela/riempie, e la si risovrappone nello stesso punto.
+    /// Durante un tratto la dimensione è la massima dei due estremi, così la zona resta sempre coperta.
+    /// </summary>
+    private string AddMask(string cur, Piece p, int width, int height)
+    {
+        var m = p.Clip.Mask!;
+        var m0 = p.SrcIn;
+        var m1 = p.SrcIn + p.Dur;
+        var points = new List<double> { m0 };
+        points.AddRange(m.Keyframes.Select(k => k.T).Where(t => t > m0 + 1e-6 && t < m1 - 1e-6).Distinct().OrderBy(t => t));
+        points.Add(m1);
+
+        for (var i = 0; i < points.Count - 1; i++)
+        {
+            var a = points[i];
+            var b = points[i + 1];
+            var ka = m.At(a);
+            var kb = m.At(b);
+            var ra = p.TlStart + (a - m0);
+            var rb = p.TlStart + (b - m0);
+            var cw = Math.Clamp(Even((int)Math.Ceiling(Math.Max(ka.W, kb.W) * width)), 2, width - width % 2);
+            var ch = Math.Clamp(Even((int)Math.Ceiling(Math.Max(ka.H, kb.H) * height)), 2, height - height % 2);
+            var cx = Lerp(ka.X * width, kb.X * width, ra, rb);
+            var cy = Lerp(ka.Y * height, kb.Y * height, ra, rb);
+
+            var main = Next("mm");
+            var src = Next("ms");
+            _statements.Add($"[{cur}]split=2[{main}][{src}]");
+
+            var sb = new StringBuilder($"[{src}]trim=start={F(ra)}:end={F(rb + 0.5 / _fps)}");
+            sb.Append($",crop=w={cw}:h={ch}:x={Esc($"clip({cx}-ow/2,0,iw-ow)")}:y={Esc($"clip({cy}-oh/2,0,ih-oh)")}:exact=1");
+            switch (m.Effect)
+            {
+                case MaskEffect.Pixelate:
+                    var block = Math.Max(2, m.Strength * _scale);
+                    sb.Append($",scale={Math.Max(1, (int)Math.Round(cw / block))}:{Math.Max(1, (int)Math.Round(ch / block))}");
+                    sb.Append($",scale={cw}:{ch}:flags=neighbor");
+                    break;
+                case MaskEffect.Solid:
+                    sb.Append($",drawbox=x=0:y=0:w=iw:h=ih:color={Color(m.Color)}:t=fill");
+                    break;
+                default:
+                    sb.Append($",gblur=sigma={F(Math.Max(1, m.Strength * _scale / 2))}:steps=2");
+                    break;
+            }
+            sb.Append(",format=yuva420p");
+            var patch = Next("mp");
+            _statements.Add($"{sb}[{patch}]");
+
+            if (m.Shape == MaskShape.Ellipse)
+            {
+                // Canale alfa ellittico calcolato una volta sola e ripetuto per tutta la durata del tratto.
+                var alpha = Next("ma");
+                var shaped = Next("me");
+                var ellipse = Esc("255*lte(pow(X/W*2-1,2)+pow(Y/H*2-1,2),1)");
+                _statements.Add($"color=c=black:s={cw}x{ch}:r={F(_fps)}:d={F(1 / _fps)},format=gray,geq=lum={ellipse}," +
+                                $"loop=loop=-1:size=1,trim=duration={F(rb - ra + 1 / _fps)},setpts=N/({F(_fps)}*TB)+{F(ra)}/TB[{alpha}]");
+                _statements.Add($"[{patch}][{alpha}]alphamerge[{shaped}]");
+                patch = shaped;
+            }
+
+            var output = Next("mv");
+            _statements.Add($"[{main}][{patch}]overlay=x={Esc($"clip({cx}-w/2,0,W-w)")}:y={Esc($"clip({cy}-h/2,0,H-h)")}:eof_action=pass[{output}]");
+            cur = output;
+        }
+        return cur;
+    }
+
+    /// <summary>Espressione ffmpeg per un valore che va linearmente da <paramref name="v0"/> a <paramref name="v1"/> tra i tempi indicati.</summary>
+    private static string Lerp(double v0, double v1, double t0, double t1) =>
+        Math.Abs(v1 - v0) < 1e-6 || t1 - t0 < 1e-6
+            ? F(v0)
+            : $"({F(v0)}+({F(v1 - v0)})*(t-{F(t0)})/{F(t1 - t0)})";
 
     private string? TextAlpha(Clip clip)
     {

@@ -68,8 +68,15 @@ namespace VideoEditor.Cli
               cut <da> <a> [--tracks V1,T1]         elimina l'intervallo e ricompatta (ripple delete)
               cut --ranges "1.2-3.4,10-11.5" [--tracks ...]   più intervalli in un colpo (vanno bene in qualsiasi ordine)
               gap <T> <durata>                     inserisce uno spazio vuoto
-              track add <video|audio|text> [--name N] [--index I] | track remove ID | track move ID I | track set ID chiave=valore
+              track add <video|audio|text|mask> [--name N] [--index I] | track remove ID | track move ID I | track set ID chiave=valore
               marker add <T> "<etichetta>" | marker remove ID
+
+            OSCURAMENTO (volti, nomi, email… — coordinate 0-1: x,y = centro, w,h = dimensioni)
+              mask add --at T --dur D [--rect 0.5,0.4,0.2,0.3] [--effect blur|pixelate|solid] [--shape ellipse|rect]
+                       [--strength 30] [--color #000000] [--track M1]
+              mask key <clipId> <T> x,y,w,h     posizione della zona all'istante T (la maschera si muove tra i keyframe)
+              mask unkey <clipId> <T>           toglie il keyframe vicino a T
+              mask clear <clipId>               toglie tutti i keyframe (resta fissa dove si trova all'inizio)
 
             TRASCRIZIONE E ANALISI
               transcribe [assetId...] [--model large-v3-turbo] [--lang it] [--prompt "nomi propri"] [--force]
@@ -82,7 +89,7 @@ namespace VideoEditor.Cli
             RENDERING (ffmpeg, NVENC se disponibile)
               render [--preview] [--out file.mp4] [--encoder auto|h264_nvenc|hevc_nvenc|av1_nvenc|libx264|libx265]
                      [--quality CQ] [--from T] [--to T] [--height H]
-              frame <T> [--out frame.png] [--height H]    esporta il fotogramma composto (per controllare l'inquadratura)
+              frame <T> [--out frame.png] [--height H] [--grid]   fotogramma composto; --grid aggiunge una griglia al 10%
 
             EDITOR APERTO
               app status                   file aperto, posizione della testina, clip selezionata, stato
@@ -204,6 +211,7 @@ namespace VideoEditor.Cli
                         return "spazio inserito";
                     }, editor);
                 case "track": return Save(store, project, label, () => Track(editor, a), editor);
+                case "mask": return Save(store, project, label, () => Mask(editor, a), editor);
                 case "marker":
                     return Save(store, project, label, () =>
                     {
@@ -229,7 +237,7 @@ namespace VideoEditor.Cli
                     var t = a.PosTime(0, "tempo");
                     var output = a.Opt("out") ?? Path.Combine(store.OutputDir, $"frame-{F(t)}.png");
                     output = Path.GetFullPath(output);
-                    await Renderer.RenderFrameAsync(store, project, t, output, a.Int("height"));
+                    await Renderer.RenderFrameAsync(store, project, t, output, a.Int("height"), grid: a.Flag("grid"));
                     Console.WriteLine(output);
                     return 0;
                 }
@@ -293,7 +301,11 @@ namespace VideoEditor.Cli
                 Console.WriteLine($"  {t.Id,-4} {t.Kind,-5} \"{t.Name}\"{flags} — {t.Clips.Count} clip");
                 foreach (var c in t.Clips)
                 {
-                    var what = c.IsText ? $"testo \"{Short(c.Text!)}\"" : $"{c.AssetId} [{F(c.In)}–{F(c.In + c.Duration)}]";
+                    var what = c.IsText ? $"testo \"{Short(c.Text!)}\""
+                        : c.Mask is { } mk ? $"maschera {mk.Effect.ToString().ToLowerInvariant()}/{mk.Shape.ToString().ToLowerInvariant()} forza {F(mk.Strength)} " +
+                            (mk.Keyframes.Count == 0 ? $"zona ({F(mk.X)},{F(mk.Y)},{F(mk.W)},{F(mk.H)})"
+                                : $"{mk.Keyframes.Count} keyframe: " + string.Join(" ", mk.Keyframes.Select(k => $"{F(c.Start + k.T - c.In)}s→({F(k.X)},{F(k.Y)},{F(k.W)},{F(k.H)})")))
+                        : $"{c.AssetId} [{F(c.In)}–{F(c.In + c.Duration)}]";
                     var extra = string.Concat(
                         Math.Abs(c.Volume - 1) > 1e-9 ? $" vol={F(c.Volume)}" : "",
                         c.FadeIn > 0 ? $" fadeIn={F(c.FadeIn)}" : "", c.FadeOut > 0 ? $" fadeOut={F(c.FadeOut)}" : "",
@@ -414,6 +426,7 @@ namespace VideoEditor.Cli
                         "video" or "v" => TrackKind.Video,
                         "audio" or "a" => TrackKind.Audio,
                         "text" or "testo" or "t" => TrackKind.Text,
+                        "mask" or "maschere" or "m" => TrackKind.Mask,
                         var k => throw new CliException($"Tipo di traccia non valido: {k}."),
                     };
                     var t = editor.AddTrack(kind, a.Opt("name"), a.Int("index"));
@@ -431,6 +444,59 @@ namespace VideoEditor.Cli
                     throw new CliException("Uso: track add|remove|move|set ...");
             }
         }
+
+        private static string Mask(TimelineEditor editor, Args a)
+        {
+            switch (a.Pos(0, "add|key|unkey|clear"))
+            {
+                case "add":
+                {
+                    var spec = new MaskSpec();
+                    if (a.Opt("rect") is { } rect) (spec.X, spec.Y, spec.W, spec.H) = ParseRect(rect);
+                    if (a.Opt("effect") is { } effect) spec.Effect = ParseEnum<MaskEffect>(effect, "effect");
+                    if (a.Opt("shape") is { } shape) spec.Shape = ParseEnum<MaskShape>(shape, "shape");
+                    if (a.Num("strength") is double strength) spec.Strength = strength;
+                    if (a.Opt("color") is { } color) spec.Color = color;
+                    var clip = editor.AddMask(a.Opt("track"), a.Num("at") ?? throw new CliException("Manca --at."), a.Num("dur") ?? 3, spec);
+                    return $"maschera {clip.Id} da {F(clip.Start)} a {F(clip.End)}";
+                }
+                case "key":
+                {
+                    var (x, y, w, h) = ParseRect(a.Pos(3, "x,y,w,h"));
+                    var clip = editor.SetMaskRect(a.Pos(1, "clipId"), a.PosTime(2, "tempo"), x, y, w, h, asKeyframe: true);
+                    return $"maschera {clip.Id}: {clip.Mask!.Keyframes.Count} keyframe";
+                }
+                case "unkey":
+                {
+                    var clip = editor.RemoveMaskKey(a.Pos(1, "clipId"), a.PosTime(2, "tempo"));
+                    return $"maschera {clip.Id}: {clip.Mask!.Keyframes.Count} keyframe";
+                }
+                case "clear":
+                {
+                    var (_, clip) = editor.GetClip(a.Pos(1, "clipId"));
+                    var m = clip.Mask ?? throw new CliException($"La clip {clip.Id} non è una maschera.");
+                    var first = m.At(clip.In);
+                    (m.X, m.Y, m.W, m.H) = (first.X, first.Y, first.W, first.H);
+                    m.Keyframes.Clear();
+                    return $"maschera {clip.Id} fissa";
+                }
+                default:
+                    throw new CliException("Uso: mask add|key|unkey|clear ...");
+            }
+        }
+
+        private static (double X, double Y, double W, double H) ParseRect(string text)
+        {
+            var p = text.Split(',', StringSplitOptions.TrimEntries);
+            if (p.Length != 4 || !p.All(v => double.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out _)))
+                throw new CliException($"Zona non valida '{text}': usa x,y,w,h (valori 0-1, x e y sono il centro).");
+            var n = p.Select(v => double.Parse(v, CultureInfo.InvariantCulture)).ToArray();
+            return (n[0], n[1], n[2], n[3]);
+        }
+
+        private static T ParseEnum<T>(string value, string name) where T : struct, Enum =>
+            Enum.TryParse<T>(value, true, out var r) ? r
+                : throw new CliException($"--{name}: valore non valido '{value}'. Validi: {string.Join(", ", Enum.GetNames<T>().Select(x => x.ToLowerInvariant()))}.");
 
         // ---------- Trascrizione ----------
 

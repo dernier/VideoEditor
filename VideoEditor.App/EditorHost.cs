@@ -146,8 +146,7 @@ public sealed class EditorHost : IDisposable
         _win.MapProjectFolder(store.Directory);
         _win.Title = $"{_project.Name} — Video Editor";
         _settings.AddRecent(store.Directory);
-        if (!File.Exists(Path.Combine(store.Directory, "CLAUDE.md")))
-            File.WriteAllText(Path.Combine(store.Directory, "CLAUDE.md"), Templates.ClaudeMd());
+        Templates.UpdateProjectClaudeMd(store.Directory);
         StartWatching();
         SendAll();
         await EnsureMediaAsync(_project.Assets);
@@ -315,6 +314,23 @@ public sealed class EditorHost : IDisposable
                 Post("select", new JsonObject { ["ids"] = new JsonArray(c.Id) });
                 break;
             }
+            case "addMask":
+            {
+                var spec = op["mask"] is JsonObject mo ? Json.Deserialize<MaskSpec>(mo.ToJsonString()) : null;
+                var c = ed.AddMask(Str(op, "trackId"), Num(op, "start") ?? _time, Num(op, "duration") ?? 3, spec);
+                label = "Aggiunta maschera";
+                Post("select", new JsonObject { ["ids"] = new JsonArray(c.Id) });
+                break;
+            }
+            case "maskRect":
+                ed.SetMaskRect(Str(op, "clipId")!, Num(op, "time") ?? _time, Num(op, "x")!.Value, Num(op, "y")!.Value,
+                    Num(op, "w")!.Value, Num(op, "h")!.Value, op["keyframe"]?.GetValue<bool>() == true);
+                label = "Zona della maschera";
+                break;
+            case "maskUnkey":
+                ed.RemoveMaskKey(Str(op, "clipId")!, Num(op, "time") ?? _time);
+                label = "Rimosso keyframe";
+                break;
             case "addTrack":
                 ed.AddTrack(Enum.Parse<TrackKind>(Str(op, "kind")!, true), Str(op, "name"));
                 label = "Aggiunta traccia";

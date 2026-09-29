@@ -1,7 +1,7 @@
 // Anteprima: modalità "live" (compone nel browser i proxy delle clip attive: veloce ma approssimata)
 // e modalità "render" (riproduce l'anteprima renderizzata da ffmpeg: identica all'esportazione).
 
-import { S, assetOf, clipEnd, findClip } from './state.js';
+import { S, assetOf, clipEnd, findClip, maskRectAt } from './state.js';
 
 const PRELOAD = 1.5; // secondi di anticipo per preparare la clip successiva
 
@@ -162,7 +162,10 @@ export class Player {
     const asset = clip.assetId ? assetOf(clip.assetId) : null;
     const src = sourceFor(clip);
     let el, media = null;
-    if (clip.text != null) {
+    if (clip.mask) {
+      el = document.createElement('div');
+      el.className = 'maskLayer';
+    } else if (clip.text != null) {
       el = document.createElement('div');
       el.className = 'txt';
     } else if (!src) {
@@ -223,7 +226,22 @@ export class Player {
     el.style.zIndex = z;
 
     if (visible) {
-      if (clip.text != null) {
+      if (clip.mask) {
+        // Anteprima live: backdrop-filter sfoca ciò che sta sotto nella pila (come nel render).
+        const m = clip.mask;
+        const r = S.maskDrag?.id === clip.id ? S.maskDrag.rect : maskRectAt(clip, t);
+        const bw = r.w * W * k, bh = r.h * H * k;
+        el.style.width = bw + 'px';
+        el.style.height = bh + 'px';
+        el.style.left = r.x * W * k - bw / 2 + 'px';
+        el.style.top = r.y * H * k - bh / 2 + 'px';
+        el.style.borderRadius = m.shape === 'ellipse' ? '50%' : '0';
+        const strength = (m.strength || 30) * k;
+        el.classList.toggle('pixelate', m.effect === 'pixelate');
+        el.style.background = m.effect === 'solid' ? (m.color || '#000') : '';
+        el.style.backdropFilter = m.effect === 'solid' ? '' : `blur(${Math.max(2, m.effect === 'pixelate' ? strength / 2 : strength / 2)}px)`;
+        el.style.setProperty('--px', Math.max(3, strength) + 'px');
+      } else if (clip.text != null) {
         const st = clip.style || {};
         el.style.left = clip.x * W * k + 'px';
         el.style.top = clip.y * H * k + 'px';

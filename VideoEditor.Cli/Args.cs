@@ -11,7 +11,7 @@ internal sealed class Args
 {
     private static readonly HashSet<string> Flags =
     [
-        "json", "ripple", "copy", "add", "preview", "force", "source", "words", "srt", "help", "timeline", "all",
+        "json", "ripple", "grid", "copy", "add", "preview", "force", "source", "words", "srt", "help", "timeline", "all",
     ];
 
     public List<string> Positional { get; } = [];

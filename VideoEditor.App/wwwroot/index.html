@@ -23,6 +23,7 @@
       <button data-cmd="rippleDelete" title="Elimina e ricompatta (Maiusc+Canc)">Elimina e chiudi</button>
       <button data-cmd="cutInOut" title="Taglia l'intervallo In/Out (X)">Taglia In/Out</button>
       <button data-cmd="addText" title="Testo alla testina (T)">T Testo</button>
+      <button data-cmd="addMask" title="Oscura una zona (volti, nomi, email…) alla testina (B)">▦ Oscura</button>
       <button data-cmd="addMarker" title="Marcatore (M)">⚑</button>
     </div>
     <div class="group">
@@ -78,6 +79,7 @@
           <video id="previewVideo" class="hidden" preload="auto"></video>
           <img id="frameImg" class="hidden" alt="">
           <div id="stageBadge" class="hidden"></div>
+          <div id="maskEdit" class="hidden"><div class="tip"></div><div class="h nw"></div><div class="h ne"></div><div class="h sw"></div><div class="h se"></div></div>
         </div>
       </div>
       <div id="transport">
@@ -131,6 +133,7 @@
       <button data-cmd="addTrackVideo" title="Nuova traccia video">+ Video</button>
       <button data-cmd="addTrackAudio" title="Nuova traccia audio">+ Audio</button>
       <button data-cmd="addTrackText" title="Nuova traccia testi">+ Testo</button>
+      <button data-cmd="addTrackMask" title="Nuova traccia maschere">+ Maschere</button>
       <label class="small"><input type="checkbox" id="chkSnap" checked> aggancio</label>
       <div class="spacer"></div>
       <span class="muted small">Zoom</span>

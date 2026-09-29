@@ -46,6 +46,7 @@ public sealed class Project
         Tracks =
         [
             new Track { Id = "T1", Name = "Testi", Kind = TrackKind.Text },
+            new Track { Id = "M1", Name = "Maschere", Kind = TrackKind.Mask },
             new Track { Id = "V2", Name = "Overlay", Kind = TrackKind.Video },
             new Track { Id = "V1", Name = "Video", Kind = TrackKind.Video },
             new Track { Id = "A1", Name = "Musica", Kind = TrackKind.Audio, Duck = true, Volume = 0.5 },
@@ -96,7 +97,7 @@ public sealed class Asset
 }
 
 [JsonConverter(typeof(JsonStringEnumConverter<TrackKind>))]
-public enum TrackKind { Video, Audio, Text }
+public enum TrackKind { Video, Audio, Text, Mask }
 
 public sealed class Track
 {
@@ -113,7 +114,7 @@ public sealed class Track
 
     public List<Clip> Clips { get; set; } = [];
 
-    [JsonIgnore] public bool IsVisual => Kind is TrackKind.Video or TrackKind.Text;
+    [JsonIgnore] public bool IsVisual => Kind is TrackKind.Video or TrackKind.Text or TrackKind.Mask;
 }
 
 /// <summary>
@@ -151,11 +152,15 @@ public sealed class Clip
     public string? Text { get; set; }
     public TextStyle? Style { get; set; }
 
+    /// <summary>Maschera di oscuramento (solo sulle tracce Maschere).</summary>
+    public MaskSpec? Mask { get; set; }
+
     /// <summary>Nota libera (es. perché Claude ha fatto questo taglio).</summary>
     public string? Note { get; set; }
 
     [JsonIgnore] public double End => Start + Duration;
     [JsonIgnore] public bool IsText => Text is not null;
+    [JsonIgnore] public bool IsMask => Mask is not null;
 }
 
 public sealed class TextStyle
@@ -179,4 +184,69 @@ public sealed class Marker
     public double Time { get; set; }
     public string Label { get; set; } = "";
     public string? Color { get; set; }
+}
+
+[JsonConverter(typeof(JsonStringEnumConverter<MaskShape>))]
+public enum MaskShape { Rect, Ellipse }
+
+[JsonConverter(typeof(JsonStringEnumConverter<MaskEffect>))]
+public enum MaskEffect { Blur, Pixelate, Solid }
+
+/// <summary>
+/// Zona da oscurare. Coordinate normalizzate sul fotogramma: <see cref="X"/>/<see cref="Y"/> sono il centro,
+/// <see cref="W"/>/<see cref="H"/> larghezza e altezza (0-1). Con i <see cref="Keyframes"/> la zona si muove:
+/// i tempi dei keyframe sono nel "tempo della maschera" (come il punto di ingresso di un video:
+/// istante sulla timeline = Start + (T - In)), così dividere e rifilare non altera il movimento.
+/// </summary>
+public sealed class MaskSpec
+{
+    public MaskShape Shape { get; set; } = MaskShape.Ellipse;
+    public MaskEffect Effect { get; set; } = MaskEffect.Blur;
+
+    /// <summary>Sfocatura: raggio in pixel; pixel: lato del quadretto in pixel (alla risoluzione del progetto).</summary>
+    public double Strength { get; set; } = 30;
+
+    /// <summary>Colore per l'effetto riquadro pieno.</summary>
+    public string Color { get; set; } = "#000000";
+
+    public double X { get; set; } = 0.5;
+    public double Y { get; set; } = 0.5;
+    public double W { get; set; } = 0.2;
+    public double H { get; set; } = 0.25;
+
+    public List<MaskKey> Keyframes { get; set; } = [];
+
+    /// <summary>Rettangolo all'istante <paramref name="maskTime"/> (interpolazione lineare, estremi mantenuti).</summary>
+    public MaskKey At(double maskTime)
+    {
+        if (Keyframes.Count == 0) return new MaskKey { T = maskTime, X = X, Y = Y, W = W, H = H };
+        var keys = Keyframes.OrderBy(k => k.T).ToList();
+        if (maskTime <= keys[0].T) return keys[0] with { T = maskTime };
+        if (maskTime >= keys[^1].T) return keys[^1] with { T = maskTime };
+        for (var i = 0; i < keys.Count - 1; i++)
+        {
+            var a = keys[i];
+            var b = keys[i + 1];
+            if (maskTime > b.T) continue;
+            var f = b.T - a.T < 1e-9 ? 0 : (maskTime - a.T) / (b.T - a.T);
+            return new MaskKey
+            {
+                T = maskTime,
+                X = a.X + (b.X - a.X) * f,
+                Y = a.Y + (b.Y - a.Y) * f,
+                W = a.W + (b.W - a.W) * f,
+                H = a.H + (b.H - a.H) * f,
+            };
+        }
+        return keys[^1] with { T = maskTime };
+    }
+}
+
+public sealed record MaskKey
+{
+    public double T { get; set; }
+    public double X { get; set; }
+    public double Y { get; set; }
+    public double W { get; set; }
+    public double H { get; set; }
 }
