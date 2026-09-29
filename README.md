@@ -40,7 +40,8 @@ visuale e Claude lavorano sullo stesso file, `project.vedit.json`, in tempo real
 ## Compilare e avviare
 
 ```powershell
-cd src\VideoEditor
+git clone https://github.com/dernier/VideoEditor.git
+cd VideoEditor
 dotnet build VideoEditor.sln
 dotnet run --project VideoEditor.App            # oppure: ...\bin\Debug\net10.0-windows\VideoEditor.exe [cartella progetto]
 dotnet publish VideoEditor.App -c Release -o C:\Tools\VideoEditor   # editor + vedit.exe nella stessa cartella
