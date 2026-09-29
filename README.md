@@ -82,10 +82,13 @@ Tutte le operazioni si annullano con Ctrl+Z, anche quelle fatte da Claude o da r
 | | Esporta | video finale MP4 (NVENC) |
 | | ⚙ | encoder, modello Whisper, percorso e modello di Claude, verifica di ffmpeg/Claude |
 | Barra della timeline | ↶ / ↷ | annulla / ripeti (anche le modifiche fatte da Claude) |
-| | ✂ Dividi | divide alla testina le clip selezionate, o tutte quelle sotto la testina |
-| | Elimina | toglie le clip selezionate lasciando il vuoto |
+| | ✂ Dividi | taglia in due alla linea rossa le clip selezionate, o tutte quelle attraversate dalla linea |
+| | ⇤ Elimina a sinistra | toglie la parte della clip prima della linea rossa e chiude il buco (il video riprende dalla linea) |
+| | Elimina a destra ⇥ | toglie la parte della clip dopo la linea rossa e chiude il buco |
+| | Elimina | toglie le clip selezionate (clic sulla clip: bordo giallo) lasciando il vuoto |
 | | Elimina e chiudi | toglie le clip selezionate e chiude il buco su tutte le tracce non bloccate |
-| | Taglia In/Out | taglia l'intervallo segnato con I e O e chiude il buco |
+| | [ In · Out ] | segnano inizio e fine di un tratto alla linea rossa (evidenziato in azzurro) |
+| | Taglia In/Out | taglia il tratto tra In e Out su tutte le tracce e chiude il buco |
 | | T Testo | testo di 3 s alla testina |
 | | ◯ Oscura / ▭ Oscura | disegna sul video una maschera ellittica / rettangolare |
 | | ⚑ | marcatore alla testina (clic destro sul marcatore per toglierlo) |
@@ -109,6 +112,7 @@ Tutte le operazioni si annullano con Ctrl+Z, anche quelle fatte da Claude o da r
 | Spazio | play/pausa | S | dividi alla testina |
 | ← / → | fotogramma prec./succ. (Maiusc: 1 s) | Canc | elimina clip (Maiusc: elimina e ricompatta) |
 | I / O | segna In / Out | X | taglia l'intervallo In/Out |
+| Q / W | elimina a sinistra / a destra della linea rossa | | |
 | T | testo alla testina | M | marcatore |
 | B / Maiusc+B | disegna maschera ellittica / rettangolare | F12 | strumenti di sviluppo (diagnosi) |
 | Ctrl+Z / Ctrl+Y | annulla / ripeti | Ctrl+rotellina, + / − | zoom timeline |

@@ -128,10 +128,18 @@
         <button data-cmd="redo" id="btnRedo" title="Ripeti (Ctrl+Y)">↷</button>
       </div>
       <div class="group">
-        <button data-cmd="split" title="Dividi alla testina le clip selezionate, o tutte quelle sotto la testina (S)">✂ Dividi</button>
-        <button data-cmd="delete" title="Elimina le clip selezionate lasciando lo spazio vuoto (Canc)">Elimina</button>
-        <button data-cmd="rippleDelete" title="Elimina le clip selezionate e chiude il buco su tutte le tracce (Maiusc+Canc)">Elimina e chiudi</button>
-        <button data-cmd="cutInOut" title="Taglia l'intervallo tra In (I) e Out (O) e chiude il buco (X)">Taglia In/Out</button>
+        <button data-cmd="split" title="Taglia in due alla linea rossa le clip selezionate, o tutte quelle attraversate dalla linea (S)">✂ Dividi</button>
+        <button data-cmd="deleteLeft" title="Elimina la parte della clip PRIMA della linea rossa e chiude il buco: il video riprende dalla linea (Q)">⇤ Elimina a sinistra</button>
+        <button data-cmd="deleteRight" title="Elimina la parte della clip DOPO la linea rossa e chiude il buco (W)">Elimina a destra ⇥</button>
+      </div>
+      <div class="group">
+        <button data-cmd="delete" title="Prima clicca una clip per selezionarla (bordo giallo). Toglie la clip e lascia il vuoto al suo posto; le altre non si spostano (Canc)">Elimina</button>
+        <button data-cmd="rippleDelete" title="Prima clicca una clip per selezionarla. Toglie la clip e chiude il vuoto: tutto ciò che segue scorre indietro, su tutte le tracce (Maiusc+Canc)">Elimina e chiudi</button>
+      </div>
+      <div class="group">
+        <button data-cmd="markIn" title="Segna l'inizio del tratto da tagliare alla linea rossa (I)">[ In</button>
+        <button data-cmd="markOut" title="Segna la fine del tratto da tagliare alla linea rossa (O)">Out ]</button>
+        <button data-cmd="cutInOut" title="Taglia il tratto azzurro tra In e Out su tutte le tracce e chiude il buco (X)">Taglia In/Out</button>
       </div>
       <div class="group">
         <button data-cmd="addText" title="Testo di 3 s alla testina (T)">T Testo</button>

@@ -39,6 +39,8 @@ Rispondi sempre in italiano.
 5. Taglia tutto in un colpo: `vedit cut --ranges "3.20-4.45,10.02-12.80,..."`. I tempi vanno presi dalla
    trascrizione **attuale** (dopo ogni taglio i tempi successivi cambiano: se tagli in più passaggi,
    rileggi `vedit transcript`). Usa inizi e fini delle parole, non tagliare a metà parola.
+   Per accorciare l'inizio o la fine di una clip fino a un punto: `vedit cut-left <T>` (toglie dall'inizio
+   della clip sotto T fino a T) e `vedit cut-right <T>` (da T alla fine della clip); entrambi ricompattano.
 6. La musica non va spezzettata: prima dei tagli bloccala (`vedit track set A1 locked=true`) oppure
    limita il taglio alle tracce del parlato (`--tracks V1,V2,T1`).
 7. Controlla: `vedit validate`, un fotogramma con `vedit frame <T>` (puoi leggere il PNG per vederlo),

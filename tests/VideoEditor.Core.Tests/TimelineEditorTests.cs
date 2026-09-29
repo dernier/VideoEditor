@@ -175,4 +175,51 @@ public class TimelineEditorTests
         Assert.Equal(4, clips[1].In, 6);
         Assert.Equal(12, p.GetDuration(), 6);
     }
+
+    [Fact]
+    public void DeleteLeft_RemovesFromClipStartToPlayheadAndCloses()
+    {
+        var p = Sample();
+        var e = new TimelineEditor(p);
+        var a = e.AddClip("V1", "m1", 0, 0, 10);   // 0-10
+        var b = e.AddClip("V1", "m1", 10, 20, 10); // 10-20
+        var music = e.AddClip("A1", "m2", 0, 0, 20);
+        var (from, to) = e.DeleteToPlayhead(14, left: true);
+        Assert.Equal((10.0, 14.0), (from, to));
+        Assert.Equal(10, b.Start, 6);          // la clip B ora riprende da dove c'era la linea rossa
+        Assert.Equal(24, b.In, 6);
+        Assert.Equal(6, b.Duration, 6);
+        Assert.Equal(10, a.Duration, 6);       // la clip precedente non si tocca
+        Assert.Equal(16, p.GetDuration(), 6);  // la musica viene accorciata insieme (sincronia)
+        Assert.Empty(e.Validate());
+    }
+
+    [Fact]
+    public void DeleteRight_RemovesFromPlayheadToClipEnd()
+    {
+        var p = Sample();
+        var e = new TimelineEditor(p);
+        var a = e.AddClip("V1", "m1", 0, 0, 10);
+        var b = e.AddClip("V1", "m1", 10, 20, 10);
+        var (from, to) = e.DeleteToPlayhead(4, left: false);
+        Assert.Equal((4.0, 10.0), (from, to));
+        Assert.Equal(4, a.Duration, 6);
+        Assert.Equal(4, b.Start, 6);
+        Assert.Equal(20, b.In, 6);
+    }
+
+    [Fact]
+    public void DeleteToPlayhead_UsesNearestEdgeAndSelection()
+    {
+        var p = Sample();
+        var e = new TimelineEditor(p);
+        e.AddClip("V1", "m1", 0, 0, 20);
+        var over = e.AddClip("V2", "m3", 5, 0, 10); // immagine 5-15 sopra il video
+        // Senza selezione: il bordo più vicino a sinistra della linea (8) è l'inizio dell'immagine (5).
+        Assert.Equal((5.0, 8.0), e.DeleteToPlayhead(8, left: true));
+        // Con selezione del solo video: si parte dall'inizio del video.
+        var video = p.FindTrack("V1")!.Clips[0];
+        Assert.Equal((0.0, 3.0), e.DeleteToPlayhead(3, left: true, [video.Id]));
+        Assert.Throws<EditException>(() => e.DeleteToPlayhead(100, left: true));
+    }
 }

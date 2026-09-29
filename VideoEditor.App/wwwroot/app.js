@@ -148,10 +148,16 @@ const commands = {
   undo: () => send('undo'),
   redo: () => send('redo'),
   split: () => op({ op: 'split', time: player.t, clipIds: [...S.selection] }),
-  delete: () => S.selection.size && op({ op: 'remove', clipIds: [...S.selection], ripple: false }),
-  rippleDelete: () => S.selection.size && op({ op: 'remove', clipIds: [...S.selection], ripple: true }),
+  delete: () => S.selection.size ? op({ op: 'remove', clipIds: [...S.selection], ripple: false })
+    : toast('Prima clicca una clip sulla timeline per selezionarla (bordo giallo), poi premi Elimina.'),
+  rippleDelete: () => S.selection.size ? op({ op: 'remove', clipIds: [...S.selection], ripple: true })
+    : toast('Prima clicca una clip sulla timeline per selezionarla (bordo giallo), poi premi Elimina e chiudi.'),
+  deleteLeft: () => { player.pause(); op({ op: 'deleteToPlayhead', left: true, time: player.t, clipIds: [...S.selection] }); },
+  deleteRight: () => { player.pause(); op({ op: 'deleteToPlayhead', left: false, time: player.t, clipIds: [...S.selection] }); },
+  markIn: () => setInOut(player.t, S.outPoint != null && S.outPoint > player.t ? S.outPoint : null),
+  markOut: () => setInOut(S.inPoint != null && S.inPoint < player.t ? S.inPoint : null, player.t),
   cutInOut: () => {
-    if (S.inPoint == null || S.outPoint == null) return toast('Segna prima In (I) e Out (O).');
+    if (S.inPoint == null || S.outPoint == null) return toast('Segna prima l\'inizio con «[ In» e la fine con «Out ]» (tasti I e O), spostando la linea rossa tra i due.');
     op({ op: 'rippleDelete', from: S.inPoint, to: S.outPoint });
     const at = S.inPoint;
     setInOut(null, null);
@@ -246,8 +252,10 @@ document.addEventListener('keydown', e => {
     'ArrowRight': () => { player.pause(); seek(player.t + (e.shiftKey ? 1 : 1 / fps())); },
     'Home': () => seek(0),
     'End': () => seek(S.duration),
-    'i': () => setInOut(player.t, S.outPoint),
-    'o': () => setInOut(S.inPoint, player.t),
+    'i': () => commands.markIn(),
+    'o': () => commands.markOut(),
+    'q': () => commands.deleteLeft(),
+    'w': () => commands.deleteRight(),
     'x': () => commands.cutInOut(),
     'm': () => commands.addMarker(),
     't': () => commands.addText(),

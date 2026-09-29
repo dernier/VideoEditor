@@ -67,6 +67,8 @@ namespace VideoEditor.Cli
               remove <clipId...> [--ripple]
               cut <da> <a> [--tracks V1,T1]         elimina l'intervallo e ricompatta (ripple delete)
               cut --ranges "1.2-3.4,10-11.5" [--tracks ...]   più intervalli in un colpo (vanno bene in qualsiasi ordine)
+              cut-left <T> [--clips c1,c2]         elimina dall'inizio della clip sotto T fino a T e ricompatta
+              cut-right <T> [--clips c1,c2]        elimina da T alla fine della clip sotto T e ricompatta
               gap <T> <durata>                     inserisce uno spazio vuoto
               track add <video|audio|text|mask> [--name N] [--index I] | track remove ID | track move ID I | track set ID chiave=valore
               marker add <T> "<etichetta>" | marker remove ID
@@ -209,6 +211,12 @@ namespace VideoEditor.Cli
                         var before = project.GetDuration();
                         editor.RippleDeleteRanges(ranges, SplitList(a.Opt("tracks")));
                         return $"tagliati {ranges.Count} intervalli, durata {Time(before)} → {Time(project.GetDuration())}";
+                    }, editor);
+                case "cut-left" or "cut-right":
+                    return Save(store, project, label, () =>
+                    {
+                        var (from, to) = editor.DeleteToPlayhead(a.PosTime(0, "tempo"), command == "cut-left", SplitList(a.Opt("clips")));
+                        return $"eliminato {F(from)}–{F(to)} ({F(to - from)} s), durata ora {Time(project.GetDuration())}";
                     }, editor);
                 case "gap":
                     return Save(store, project, label, () =>

@@ -293,6 +293,17 @@ public sealed class EditorHost : IDisposable
                 label = ripple ? "Eliminazione con ricompattamento" : "Eliminate clip";
                 break;
             }
+            case "deleteToPlayhead":
+            {
+                var left = op["left"]?.GetValue<bool>() == true;
+                var t = Num(op, "time") ?? _time;
+                var ids = op["clipIds"]?.AsArray().Select(n => n!.GetValue<string>()).ToList();
+                var (from, to) = ed.DeleteToPlayhead(t, left, ids);
+                label = left ? $"Eliminato a sinistra ({to - from:0.##} s)" : $"Eliminato a destra ({to - from:0.##} s)";
+                // A sinistra il contenuto scorre indietro: la testina va dove ora riprende il video.
+                if (left) Post("seek", new JsonObject { ["time"] = from });
+                break;
+            }
             case "rippleDelete":
                 ed.RippleDelete(Num(op, "from")!.Value, Num(op, "to")!.Value, op["tracks"]?.AsArray().Select(n => n!.GetValue<string>()).ToList());
                 label = $"Taglio {TranscriptTools.Time(Num(op, "from")!.Value)}–{TranscriptTools.Time(Num(op, "to")!.Value)}";

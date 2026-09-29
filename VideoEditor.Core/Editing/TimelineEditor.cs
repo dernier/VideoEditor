@@ -334,6 +334,33 @@ public sealed class TimelineEditor(Project project)
         }
     }
 
+    /// <summary>
+    /// «Elimina a sinistra/destra» della testina: toglie la parte delle clip che sta prima
+    /// (dall'inizio della clip alla testina) o dopo (dalla testina alla fine della clip) e chiude il
+    /// buco su tutte le tracce non bloccate, così video, audio e testi restano allineati.
+    /// Le clip considerate sono quelle indicate oppure, senza indicazioni, quelle attraversate dalla
+    /// testina (preferendo video e audio). Con più clip si prende il bordo più vicino alla testina,
+    /// per non togliere più del dovuto. Restituisce l'intervallo eliminato.
+    /// </summary>
+    public (double From, double To) DeleteToPlayhead(double time, bool left, IEnumerable<string>? clipIds = null)
+    {
+        var ids = clipIds?.ToHashSet();
+        var under = Project.Tracks
+            .Where(t => !t.Locked)
+            .SelectMany(t => t.Clips.Select(c => (Track: t, Clip: c)))
+            .Where(x => time > x.Clip.Start + MinDuration && time < x.Clip.End - MinDuration)
+            .Where(x => ids is null || ids.Count == 0 || ids.Contains(x.Clip.Id))
+            .ToList();
+        if ((ids is null || ids.Count == 0) && under.Any(x => x.Track.Kind is TrackKind.Video or TrackKind.Audio))
+            under = under.Where(x => x.Track.Kind is TrackKind.Video or TrackKind.Audio).ToList();
+        if (under.Count == 0)
+            throw new EditException("Nessuna clip attraversata dalla linea rossa: posiziona la testina dentro la clip da accorciare.");
+        var from = left ? under.Max(x => x.Clip.Start) : time;
+        var to = left ? time : under.Min(x => x.Clip.End);
+        RippleDelete(from, to);
+        return (from, to);
+    }
+
     /// <summary>Elimina più intervalli (ad esempio le pause trovate da Claude), dal più lontano al più vicino.</summary>
     public void RippleDeleteRanges(IEnumerable<(double From, double To)> ranges, IEnumerable<string>? trackIds = null)
     {
